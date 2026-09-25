@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "*/20 * * * *"
   workflow_dispatch:
+    inputs:
+      force:
+        description: "Paksa restart semua akun"
+        type: boolean
+        default: false
 
 jobs:
   restart:
@@ -17,6 +22,7 @@ jobs:
       - name: Cek & nyalakan akun ${{ matrix.account }}
         env:
           ACC: ${{ matrix.account }}
+          FORCE: ${{ inputs.force }}
           KAGGLE_USERNAME: ${{ secrets[format('KAGGLE_USERNAME_{0}', matrix.account)] }}
           KAGGLE_KEY: ${{ secrets[format('KAGGLE_KEY_{0}', matrix.account)] }}
           UPSTASH_URL: ${{ secrets.UPSTASH_URL }}
@@ -24,12 +30,12 @@ jobs:
         run: |
           if [ -z "$KAGGLE_USERNAME" ]; then echo "Akun $ACC belum diisi, lewati"; exit 0; fi
           ALIVE=$(curl -s -H "Authorization: Bearer $UPSTASH_TOKEN" "$UPSTASH_URL/get/foundry:ai-url:$ACC" | python3 -c "import sys,json;print(json.load(sys.stdin).get('result') or '')")
-          if [ -n "$ALIVE" ]; then echo "Akun $ACC hidup: $ALIVE"; exit 0; fi
+          if [ "$FORCE" != "true" ] && [ -n "$ALIVE" ]; then echo "Akun $ACC hidup: $ALIVE"; exit 0; fi
           pip install -q kaggle
           SLUG="$KAGGLE_USERNAME/foundry-ai-server"
           STATUS=$(kaggle kernels status "$SLUG" 2>/dev/null || true)
           echo "$STATUS"
-          if echo "$STATUS" | grep -qiE "running|queued"; then echo "Masih menyala/loading, tunggu"; exit 0; fi
+          if [ "$FORCE" != "true" ] && echo "$STATUS" | grep -qiE "running|queued"; then echo "Masih menyala/loading, tunggu"; exit 0; fi
           mkdir -p /tmp/k && cd /tmp/k
           sed -e "s|__ACCOUNT_ID__|$ACC|" -e "s|__UPSTASH_URL__|$UPSTASH_URL|" -e "s|__UPSTASH_TOKEN__|$UPSTASH_TOKEN|" \
             "$GITHUB_WORKSPACE/kaggle/foundry_kaggle.py" > foundry_kaggle.py
