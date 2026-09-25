@@ -1,0 +1,51 @@
+# Cek tiap 20 menit: kalau server AI di akun Kaggle mana pun mati, nyalakan lagi otomatis.
+name: Kaggle auto-restart
+on:
+  schedule:
+    - cron: "*/20 * * * *"
+  workflow_dispatch:
+
+jobs:
+  restart:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        account: ["1", "2", "3"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cek & nyalakan akun ${{ matrix.account }}
+        env:
+          ACC: ${{ matrix.account }}
+          KAGGLE_USERNAME: ${{ secrets[format('KAGGLE_USERNAME_{0}', matrix.account)] }}
+          KAGGLE_KEY: ${{ secrets[format('KAGGLE_KEY_{0}', matrix.account)] }}
+          UPSTASH_URL: ${{ secrets.UPSTASH_URL }}
+          UPSTASH_TOKEN: ${{ secrets.UPSTASH_TOKEN }}
+        run: |
+          if [ -z "$KAGGLE_USERNAME" ]; then echo "Akun $ACC belum diisi, lewati"; exit 0; fi
+          ALIVE=$(curl -s -H "Authorization: Bearer $UPSTASH_TOKEN" "$UPSTASH_URL/get/foundry:ai-url:$ACC" | python3 -c "import sys,json;print(json.load(sys.stdin).get('result') or '')")
+          if [ -n "$ALIVE" ]; then echo "Akun $ACC hidup: $ALIVE"; exit 0; fi
+          pip install -q kaggle
+          SLUG="$KAGGLE_USERNAME/foundry-ai-server"
+          STATUS=$(kaggle kernels status "$SLUG" 2>/dev/null || true)
+          echo "$STATUS"
+          if echo "$STATUS" | grep -qiE "running|queued"; then echo "Masih menyala/loading, tunggu"; exit 0; fi
+          mkdir -p /tmp/k && cd /tmp/k
+          sed -e "s|__ACCOUNT_ID__|$ACC|" -e "s|__UPSTASH_URL__|$UPSTASH_URL|" -e "s|__UPSTASH_TOKEN__|$UPSTASH_TOKEN|" \
+            "$GITHUB_WORKSPACE/kaggle/foundry_kaggle.py" > foundry_kaggle.py
+          cat > kernel-metadata.json <<EOF
+          {
+            "id": "$SLUG",
+            "title": "foundry-ai-server",
+            "code_file": "foundry_kaggle.py",
+            "language": "python",
+            "kernel_type": "script",
+            "is_private": true,
+            "enable_gpu": true,
+            "enable_internet": true,
+            "machine_shape": "NvidiaTeslaT4",
+            "dataset_sources": ["kztutorial/rvn-cache"]
+          }
+          EOF
+          kaggle kernels push -p .
+          echo "Akun $ACC dinyalakan ulang"
