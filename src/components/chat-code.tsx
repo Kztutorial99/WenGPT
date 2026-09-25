@@ -47,7 +47,7 @@ export function CopyButton({ text, className = "" }: { text: string; className?:
 }
 
 export function CodeBox(props: Record<string, unknown>) {
-  const children = props.children as ReactNode;
+  const children = props['children'] as ReactNode;
   const child = Array.isArray(children) ? children[0] : children;
   const cls = isValidElement(child) ? String((child.props as { className?: string }).className ?? "") : "";
   const lang = /language-([\w+-]+)/.exec(cls)?.[1] ?? "kode";
