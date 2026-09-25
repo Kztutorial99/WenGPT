@@ -5,5 +5,5 @@
 - [x] Hapus seluruh sesi aktif
 - [x] Linimasa baru dengan waktu, durasi, dan checkpoint
 - [x] Tema Red Dark Smooth dan efek sentuh stabil
-- [ ] Validasi build dan alur web langsung
-- [ ] Sinkronkan perubahan ke GitHub dan periksa deployment Vercel
+- [x] Validasi build dan alur web langsung
+- [x] Sinkronkan perubahan ke GitHub dan periksa deployment Vercel
