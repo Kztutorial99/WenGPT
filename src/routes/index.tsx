@@ -1,16 +1,29 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import { ArrowUp, Bot, ChevronRight, Loader2, Plus, Square, Terminal, FileText } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Bot, FileText, Plus, Terminal } from "lucide-react";
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from "@/components/ai-elements/conversation";
+import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
+import {
+  PromptInput,
+  PromptInputFooter,
+  PromptInputSubmit,
+  PromptInputTextarea,
+} from "@/components/ai-elements/prompt-input";
+import { Shimmer } from "@/components/ai-elements/shimmer";
+import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from "@/components/ai-elements/tool";
+import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "WenGPT — asisten AI dengan sandbox" },
-      { name: "description", content: "Ngobrol dengan WenGPT. Kalau perlu, AI bisa menjalankan perintah dan package di sandbox Linux." },
+      { name: "description", content: "Ngobrol dengan WenGPT dan jalankan pekerjaan di sandbox Linux saat diperlukan." },
       { property: "og:title", content: "WenGPT — asisten AI dengan sandbox" },
-      { property: "og:description", content: "Ngobrol dengan WenGPT. Kalau perlu, AI bisa menjalankan perintah dan package di sandbox Linux." },
+      { property: "og:description", content: "Ngobrol dengan WenGPT dan jalankan pekerjaan di sandbox Linux saat diperlukan." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -19,256 +32,232 @@ export const Route = createFileRoute("/")({
 });
 
 type ToolIn = { command?: string; path?: string; content?: string };
-type ToolOut = { exitCode?: number; stdout?: string; stderr?: string; ok?: boolean };
+type ToolOut = { exitCode?: number; stdout?: string; stderr?: string; ok?: boolean; error?: string };
 type ToolRun = { id: string; name: string; input: ToolIn; output?: ToolOut };
 type Part = { type: "text"; text: string } | { type: "tool"; run: ToolRun };
-type Message = { id: string; role: "user" | "assistant"; parts: Part[] };
+type MessageData = { id: string; role: "user" | "assistant"; parts: Part[] };
 
 const STORE = "wengpt:chat";
 const STARTERS = [
-  "Halo! Kamu bisa bantu apa aja?",
-  "Install pandas lalu hitung rata-rata dari 10 angka acak",
+  "Kamu bisa bantu apa saja?",
+  "Install pandas lalu hitung rata-rata 10 angka acak",
   "Cek versi Python dan Node di sandbox",
-  "Jelaskan bedanya REST dan GraphQL",
+  "Jelaskan perbedaan REST dan GraphQL",
 ];
 
-function toText(m: Message): string {
-  return m.parts
-    .map((p) => {
-      if (p.type === "text") return p.text;
-      const o = p.run.output ?? {};
-      return `\n[Tool ${p.run.name} ${JSON.stringify(p.run.input).slice(0, 300)} → ${JSON.stringify(o).slice(0, 800)}]\n`;
+function toText(message: MessageData): string {
+  return message.parts
+    .map((part) => {
+      if (part.type === "text") return part.text;
+      return `\n[Tool ${part.run.name}: ${JSON.stringify(part.run.input).slice(0, 300)} → ${JSON.stringify(part.run.output ?? {}).slice(0, 800)}]\n`;
     })
     .join("");
 }
 
 function ToolCard({ run }: { run: ToolRun }) {
-  const done = !!run.output;
-  const o: ToolOut = run.output ?? {};
-  const failed = done && ((typeof o.exitCode === "number" && o.exitCode !== 0) || o.ok === false);
-  const label = run.name === "run_command" ? String(run.input.command ?? "") : `Tulis ${String(run.input.path ?? "")}`;
-  const Icon = run.name === "run_command" ? Terminal : FileText;
+  const output = run.output;
+  const failed = !!output && ((typeof output.exitCode === "number" && output.exitCode !== 0) || output.ok === false);
+  const command = run.name === "run_command";
+  const label = command ? String(run.input.command ?? "Perintah terminal") : `Tulis ${String(run.input.path ?? "file")}`;
+  const state = !output ? "input-available" : failed ? "output-error" : "output-available";
+  const result = output
+    ? command
+      ? `${String(output.stdout ?? "")}${output.stderr ? `\n${String(output.stderr)}` : ""}\n[exit ${String(output.exitCode)}]`
+      : JSON.stringify(output, null, 2)
+    : undefined;
+
   return (
-    <details className="group my-2 rounded-lg border border-border bg-muted/40 text-sm">
-      <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2">
-        <ChevronRight className="size-3.5 shrink-0 transition group-open:rotate-90" />
-        <Icon className="size-3.5 shrink-0 text-muted-foreground" />
-        <code className="min-w-0 flex-1 truncate font-mono text-xs">{label}</code>
-        {!done ? (
-          <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
-        ) : (
-          <span className={cn("text-xs", failed ? "text-destructive" : "text-muted-foreground")}>
-            {failed ? "gagal" : "selesai"}
-          </span>
-        )}
-      </summary>
-      <div className="border-t border-border px-3 py-2">
-        {run.name === "write_file" && (
-          <pre className="max-h-64 overflow-auto whitespace-pre-wrap font-mono text-xs">{String(run.input.content ?? "")}</pre>
-        )}
-        {done && (
-          <pre className="max-h-80 overflow-auto whitespace-pre-wrap font-mono text-xs">
-            {run.name === "run_command"
-              ? `${String(o.stdout ?? "")}${o.stderr ? `\n${String(o.stderr)}` : ""}\n[exit ${String(o.exitCode)}]`
-              : JSON.stringify(o, null, 2)}
-          </pre>
-        )}
-      </div>
-    </details>
+    <Tool defaultOpen={false} className="my-3 min-w-0 overflow-hidden border-border/70 bg-card/55 backdrop-blur-xl">
+      <ToolHeader
+        type="dynamic-tool"
+        toolName={run.name}
+        state={state}
+        title={label}
+        className="min-w-0 [&>div]:min-w-0 [&>div>span:first-of-type]:max-w-52 [&>div>span:first-of-type]:truncate sm:[&>div>span:first-of-type]:max-w-md"
+      />
+      <ToolContent className="min-w-0 border-t border-border/60 pt-3">
+        <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
+          {command ? <Terminal className="size-3.5" /> : <FileText className="size-3.5" />}
+          {command ? "Terminal" : "File"}
+        </div>
+        <ToolInput input={run.input} />
+        <ToolOutput output={result} errorText={failed ? output?.stderr || output?.error || "Perintah gagal." : undefined} />
+      </ToolContent>
+    </Tool>
   );
 }
 
 function Chat() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<MessageData[]>([]);
   const [sandboxId, setSandboxId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     try {
-      const s = JSON.parse(localStorage.getItem(STORE) || "{}");
-      if (Array.isArray(s.messages)) setMessages(s.messages);
-      if (s.sandboxId) setSandboxId(s.sandboxId);
-    } catch {}
-    inputRef.current?.focus();
+      const saved = JSON.parse(localStorage.getItem(STORE) || "{}");
+      if (Array.isArray(saved.messages)) setMessages(saved.messages);
+      if (typeof saved.sandboxId === "string") setSandboxId(saved.sandboxId);
+    } catch {
+      localStorage.removeItem(STORE);
+    }
   }, []);
 
   useEffect(() => {
     if (!streaming) localStorage.setItem(STORE, JSON.stringify({ messages, sandboxId }));
   }, [messages, sandboxId, streaming]);
 
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [messages]);
+  const send = useCallback(async (text: string) => {
+    const prompt = text.trim();
+    if (!prompt || streaming) return;
+    setInput("");
+    const history: MessageData[] = [...messages, { id: crypto.randomUUID(), role: "user", parts: [{ type: "text", text: prompt }] }];
+    const assistantId = crypto.randomUUID();
+    setMessages([...history, { id: assistantId, role: "assistant", parts: [] }]);
+    setStreaming(true);
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const update = (fn: (parts: Part[]) => Part[]) =>
+      setMessages((current) => current.map((message) => message.id === assistantId ? { ...message, parts: fn(message.parts) } : message));
 
-  const send = useCallback(
-    async (text: string) => {
-      const prompt = text.trim();
-      if (!prompt || streaming) return;
-      setInput("");
-      const history: Message[] = [...messages, { id: crypto.randomUUID(), role: "user", parts: [{ type: "text", text: prompt }] }];
-      const aid = crypto.randomUUID();
-      setMessages([...history, { id: aid, role: "assistant", parts: [] }]);
-      setStreaming(true);
-      const controller = new AbortController();
-      abortRef.current = controller;
-
-      const update = (fn: (parts: Part[]) => Part[]) =>
-        setMessages((prev) => prev.map((m) => (m.id === aid ? { ...m, parts: fn(m.parts) } : m)));
-
-      try {
-        const res = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          signal: controller.signal,
-          body: JSON.stringify({
-            sandboxId,
-            messages: history.map((m) => ({ id: m.id, role: m.role, parts: [{ type: "text", text: toText(m) }] })),
-          }),
-        });
-        if (!res.ok || !res.body) throw new Error((await res.text()) || "WenGPT tidak merespons.");
-        const reader = res.body.getReader();
-        const dec = new TextDecoder();
-        let buf = "";
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buf += dec.decode(value, { stream: true });
-          const lines = buf.split("\n");
-          buf = lines.pop() ?? "";
-          for (const line of lines) {
-            if (!line.trim()) continue;
-            const e = JSON.parse(line);
-            if (e.t === "text" || e.t === "error") {
-              const v = e.t === "error" ? `\n\n**${e.v}**` : e.v;
-              update((parts) => {
-                const last = parts[parts.length - 1];
-                if (last?.type === "text") return [...parts.slice(0, -1), { type: "text", text: last.text + v }];
-                return [...parts, { type: "text", text: v }];
-              });
-            } else if (e.t === "sandbox") setSandboxId(e.id);
-            else if (e.t === "tool")
-              update((parts) => [...parts, { type: "tool", run: { id: e.id, name: e.name, input: e.input ?? {} } }]);
-            else if (e.t === "result")
-              update((parts) =>
-                parts.map((p) => (p.type === "tool" && p.run.id === e.id ? { type: "tool", run: { ...p.run, output: e.output } } : p)),
-              );
-          }
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          sandboxId,
+          messages: history.map((message) => ({ id: message.id, role: message.role, parts: [{ type: "text", text: toText(message) }] })),
+        }),
+      });
+      if (!response.ok || !response.body) throw new Error((await response.text()) || "WenGPT tidak merespons.");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const event = JSON.parse(line);
+          if (event.t === "text" || event.t === "error") {
+            const value = event.t === "error" ? `\n\n**${event.v}**` : event.v;
+            update((parts) => {
+              const last = parts.at(-1);
+              return last?.type === "text"
+                ? [...parts.slice(0, -1), { type: "text", text: last.text + value }]
+                : [...parts, { type: "text", text: value }];
+            });
+          } else if (event.t === "sandbox") setSandboxId(event.id);
+          else if (event.t === "tool") update((parts) => [...parts, { type: "tool", run: { id: event.id, name: event.name, input: event.input ?? {} } }]);
+          else if (event.t === "result") update((parts) => parts.map((part) => part.type === "tool" && part.run.id === event.id ? { type: "tool", run: { ...part.run, output: event.output } } : part));
         }
-      } catch (err) {
-        if ((err as Error).name !== "AbortError")
-          update((parts) => [...parts, { type: "text", text: `\n\n**${(err as Error).message}**` }]);
-      } finally {
-        setStreaming(false);
-        abortRef.current = null;
-        inputRef.current?.focus();
       }
-    },
-    [messages, sandboxId, streaming],
-  );
+    } catch (error) {
+      if ((error as Error).name !== "AbortError") update((parts) => [...parts, { type: "text", text: `\n\n**${(error as Error).message}**` }]);
+    } finally {
+      setStreaming(false);
+      abortRef.current = null;
+      window.setTimeout(() => inputRef.current?.focus(), 0);
+    }
+  }, [messages, sandboxId, streaming]);
 
   const reset = () => {
     abortRef.current?.abort();
     setMessages([]);
     setSandboxId(null);
+    setInput("");
     localStorage.removeItem(STORE);
     inputRef.current?.focus();
   };
 
-  const last = messages[messages.length - 1];
-  const waiting = streaming && last?.role === "assistant" && last.parts.length === 0;
+  const last = messages.at(-1);
+  const waiting = streaming && last?.role === "assistant" && !last.parts.some((part) => part.type === "text" && part.text.trim());
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden text-foreground">
-      <header className="flex items-center justify-between gap-3 border-b border-border/70 px-4 py-3">
-        <div className="flex items-center gap-2.5">
-          <span className="grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground">
-            <Bot className="size-4" />
+    <main className="chat-shell flex h-dvh min-w-0 flex-col overflow-hidden bg-background text-foreground">
+      <header className="z-20 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-border/50 bg-background/75 px-4 py-3 backdrop-blur-xl sm:px-6">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="grid size-8 shrink-0 place-items-center rounded-md border border-border/80 bg-card shadow-panel">
+            <Bot className="size-4 text-primary" />
           </span>
-          <span className="font-semibold">WenGPT</span>
+          <div className="min-w-0">
+            <h1 className="truncate text-sm font-semibold">WenGPT</h1>
+            <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <span className="size-1.5 rounded-full bg-success shadow-status" /> Siap membantu
+            </p>
+          </div>
         </div>
-        <button onClick={reset} className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-sm hover:bg-muted">
-          <Plus className="size-4" /> Chat baru
-        </button>
+        <Button type="button" variant="ghost" size="sm" onClick={reset} className="shrink-0 text-muted-foreground" title="Mulai chat baru">
+          <Plus className="size-4" /> <span className="hidden sm:inline">Chat baru</span>
+        </Button>
       </header>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-3xl px-4 py-6">
+      <Conversation className="min-h-0 min-w-0">
+        <ConversationContent className="mx-auto min-h-full w-full min-w-0 max-w-3xl gap-7 px-3 py-6 sm:px-6 sm:py-8">
           {messages.length === 0 ? (
-            <div className="pt-16 text-center">
-              <h1 className="text-2xl font-semibold">Mau ngobrol apa hari ini?</h1>
-              <p className="mt-2 text-sm text-muted-foreground">WenGPT bisa ngobrol, dan menjalankan perintah di sandbox kalau perlu.</p>
-              <div className="mt-8 grid gap-2 sm:grid-cols-2">
-                {STARTERS.map((s) => (
-                  <button key={s} onClick={() => send(s)} className="rounded-lg border border-border p-3 text-left text-sm hover:bg-muted">
-                    {s}
-                  </button>
+            <section className="flex min-h-[65dvh] flex-col items-center justify-center px-1 text-center">
+              <span className="mb-5 grid size-12 place-items-center rounded-lg border border-border/80 bg-card/70 shadow-glow backdrop-blur-xl">
+                <Bot className="size-5 text-primary" />
+              </span>
+              <h2 className="text-balance text-2xl font-semibold sm:text-3xl">Mau mengerjakan apa hari ini?</h2>
+              <p className="mt-2 max-w-md text-pretty text-sm leading-6 text-muted-foreground">Ngobrol, cari jawaban, atau jalankan pekerjaan langsung di sandbox.</p>
+              <div className="mt-8 grid w-full max-w-xl grid-cols-1 gap-2 sm:grid-cols-2">
+                {STARTERS.map((starter) => (
+                  <Button key={starter} type="button" variant="outline" onClick={() => send(starter)} className="h-auto min-w-0 justify-start whitespace-normal bg-card/45 px-3 py-3 text-left text-sm leading-5 backdrop-blur-xl">
+                    <span className="min-w-0 break-words">{starter}</span>
+                  </Button>
                 ))}
               </div>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {messages.map((m) =>
-                m.role === "user" ? (
-                  <div key={m.id} className="flex justify-end">
-                    <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-primary px-4 py-2.5 text-primary-foreground">
-                      {toText(m)}
-                    </div>
-                  </div>
-                ) : (
-                  <div key={m.id} className="prose prose-sm max-w-none dark:prose-invert">
-                    {m.parts.map((p, i) =>
-                      p.type === "text" ? <ReactMarkdown key={i}>{p.text}</ReactMarkdown> : <ToolCard key={p.run.id} run={p.run} />,
-                    )}
-                  </div>
-                ),
-              )}
-              {waiting && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="size-4 animate-spin" /> WenGPT sedang berpikir…
+            </section>
+          ) : messages.map((message) => (
+            <Message key={message.id} from={message.role} className="min-w-0 max-w-full">
+              {message.role === "assistant" && (
+                <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
+                  <span className="grid size-6 place-items-center rounded-sm border border-border/70 bg-card"><Bot className="size-3.5 text-primary" /></span>
+                  WenGPT
                 </div>
               )}
-            </div>
-          )}
-        </div>
-      </div>
+              <MessageContent className={message.role === "user" ? "max-w-[88%] overflow-visible rounded-2xl rounded-tr-sm bg-primary px-4 py-3 text-primary-foreground shadow-user sm:max-w-[75%]" : "w-full overflow-visible"}>
+                {message.parts.map((part, index) => part.type === "text"
+                  ? <MessageResponse key={`${message.id}-${index}`} isAnimating={streaming && message.id === last?.id} className="wengpt-markdown min-w-0 max-w-full">{part.text}</MessageResponse>
+                  : <ToolCard key={part.run.id} run={part.run} />)}
+                {waiting && message.id === last?.id && <Shimmer className="text-sm">WenGPT sedang berpikir…</Shimmer>}
+              </MessageContent>
+            </Message>
+          ))}
+        </ConversationContent>
+        <ConversationScrollButton className="bottom-3 z-30 size-9 border-border/70 bg-card/90 shadow-panel backdrop-blur-xl" aria-label="Kembali ke pesan terbaru" />
+      </Conversation>
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          send(input);
-        }}
-        className="mx-auto w-full max-w-3xl px-4 pb-4"
-      >
-        <div className="flex items-end gap-2 rounded-2xl border border-border bg-card p-2">
-          <textarea
+      <footer className="relative z-20 shrink-0 border-t border-border/40 bg-background/78 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-xl sm:px-6">
+        <PromptInput
+          onSubmit={({ text }) => send(text)}
+          className="mx-auto w-full max-w-3xl overflow-hidden rounded-2xl border-border/70 bg-card/65 shadow-panel backdrop-blur-xl focus-within:border-ring/60"
+        >
+          <PromptInputTextarea
             ref={inputRef}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                send(input);
-              }
-            }}
-            rows={1}
-            placeholder="Tulis pesan…"
-            className="max-h-40 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none"
+            onChange={(event) => setInput(event.currentTarget.value)}
+            placeholder="Tulis pesan untuk WenGPT…"
+            className="min-h-12 max-h-40 min-w-0 px-4 pt-3 pb-1 text-base leading-6 sm:text-sm"
           />
-          {streaming ? (
-            <button type="button" onClick={() => abortRef.current?.abort()} className="grid size-9 place-items-center rounded-full bg-muted">
-              <Square className="size-4" />
-            </button>
-          ) : (
-            <button type="submit" disabled={!input.trim()} className="grid size-9 place-items-center rounded-full bg-primary text-primary-foreground disabled:opacity-40">
-              <ArrowUp className="size-4" />
-            </button>
-          )}
-        </div>
-      </form>
-    </div>
+          <PromptInputFooter className="min-h-10 px-2 pb-2">
+            <span className="truncate pl-1 text-[11px] text-muted-foreground">Enter kirim · Shift + Enter baris baru</span>
+            <PromptInputSubmit
+              status={streaming ? "streaming" : "ready"}
+              onStop={() => abortRef.current?.abort()}
+              disabled={!streaming && !input.trim()}
+              className="size-8 shrink-0 rounded-lg"
+            />
+          </PromptInputFooter>
+        </PromptInput>
+      </footer>
+    </main>
   );
 }

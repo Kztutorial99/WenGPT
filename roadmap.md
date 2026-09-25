@@ -16,3 +16,9 @@
       reporting a live tunnel URL)
 - [ ] Optional: Vercel build target adjustment once the GitHub repo is imported
 
+## Perbaikan pengalaman chat
+- [x] Terapkan gaya modern glassmorphism dark
+- [x] Hilangkan overflow horizontal di mobile
+- [x] Benahi auto-scroll dan tombol kembali ke bawah
+- [x] Rapikan composer dan tampilan Markdown
+- [ ] Uji mobile/desktop, push, dan verifikasi deployment

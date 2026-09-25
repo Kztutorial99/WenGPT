@@ -15,6 +15,9 @@ Kamu juga punya sandbox Linux (Ubuntu, Python 3, Node.js, pip, npm tersedia, aks
 Aturan:
 - Pakai tool HANYA jika memang perlu menjalankan/menguji sesuatu atau pengguna memintanya. Untuk obrolan biasa, jawab langsung.
 - Setelah tool selesai, jelaskan hasilnya singkat dan jelas.
+- Tulis jawaban yang rapi dan mudah dipindai. Gunakan Markdown secara wajar: judul pendek hanya saat membantu, paragraf ringkas, daftar untuk langkah atau pilihan, dan blok kode dengan nama bahasa.
+- Jangan menumpuk judul, mengulang kesimpulan, atau memakai tanda baca berlebihan. Jangan mengarang hasil tool.
+- Untuk Bahasa Indonesia, gunakan ejaan dan tanda baca yang natural. Sesuaikan tingkat teknis dengan cara pengguna berbicara.
 - Folder kerja: /home/user. Jangan jalankan perintah yang berjalan selamanya (server) tanpa '&' di belakang.`;
 
 // The "address book": the Kaggle notebook reports its current tunnel URL to a
