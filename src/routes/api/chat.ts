@@ -1,24 +1,21 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createOpenAI } from "@ai-sdk/openai";
-import { streamText, convertToModelMessages, type UIMessage } from "ai";
+import { streamText, convertToModelMessages, tool, stepCountIs, type UIMessage } from "ai";
+import { z } from "zod";
+import { Sandbox } from "e2b";
 
 const SYSTEM_PROMPT = `/no_think
-You are Foundry, an AI web app builder.
+Kamu adalah WenGPT, asisten AI yang ramah dan cerdas. Jawab dalam bahasa yang dipakai pengguna (default Bahasa Indonesia).
 
-The user describes an app. You reply with:
-1. One or two short sentences describing what you built (plain language).
-2. Exactly one fenced code block tagged \`html\` containing a COMPLETE, self-contained, single-file web app.
+Kamu bisa ngobrol biasa, menjelaskan, menulis kode, dan menjawab pertanyaan apa pun.
+Kamu juga punya sandbox Linux (Ubuntu, Python 3, Node.js, pip, npm tersedia, akses internet) lewat tool:
+- run_command: jalankan perintah shell (install package, jalankan script, cek hasil).
+- write_file: tulis file ke sandbox.
 
-Rules for the code block:
-- Full document: <!doctype html>, <html>, <head>, <body>.
-- All CSS in a <style> tag and all JS in a <script> tag inside the same file.
-- You may use CDN scripts (https://cdn.tailwindcss.com, https://unpkg.com/...) but nothing that needs a build step or server.
-- No external local files, no imports of local paths, no placeholder TODOs.
-- Make it look genuinely good: considered typography, spacing, color and motion.
-- It must run standalone inside a sandboxed iframe.
-
-When the user asks for a change, output the FULL updated file again, never a diff.
-Never wrap the explanation in code fences. Never output more than one code block.`;
+Aturan:
+- Pakai tool HANYA jika memang perlu menjalankan/menguji sesuatu atau pengguna memintanya. Untuk obrolan biasa, jawab langsung.
+- Setelah tool selesai, jelaskan hasilnya singkat dan jelas.
+- Folder kerja: /home/user. Jangan jalankan perintah yang berjalan selamanya (server) tanpa '&' di belakang.`;
 
 // The "address book": the Kaggle notebook reports its current tunnel URL to a
 // tiny free Redis (Upstash REST) every time it restarts. We read the freshest
@@ -80,74 +77,119 @@ async function resolveAiBaseUrlUncached(): Promise<string> {
 }
 
 
+
+const clip = (s: string, n = 6000) => (s.length > n ? s.slice(0, n) + `\n...[dipotong ${s.length - n} karakter]` : s);
+
+type Ev =
+  | { t: "text"; v: string }
+  | { t: "sandbox"; id: string }
+  | { t: "tool"; id: string; name: string; input: unknown }
+  | { t: "result"; id: string; output: unknown }
+  | { t: "error"; v: string };
+
 export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
       POST: async ({ request }) => {
         const apiKey = process.env["AI_API_KEY"];
-        if (!apiKey) {
-          return new Response(
-            "AI_API_KEY is not configured yet. Add your provider API key in project settings.",
-            { status: 500 },
-          );
-        }
+        if (!apiKey) return new Response("AI_API_KEY belum diatur.", { status: 500 });
 
-        const { messages } = (await request.json()) as { messages: UIMessage[] };
-
+        const body = (await request.json()) as { messages: UIMessage[]; sandboxId?: string | null };
         const baseURL = await resolveAiBaseUrl();
-
-
         const provider = createOpenAI({ apiKey, baseURL });
-
         const model = process.env["AI_MODEL"] || "gpt-4o-mini";
+
+        const encoder = new TextEncoder();
+        let controllerRef: ReadableStreamDefaultController<Uint8Array> | null = null;
+        const emit = (e: Ev) => controllerRef?.enqueue(encoder.encode(JSON.stringify(e) + "\n"));
+
+        let sandbox: Sandbox | null = null;
+        const getSandbox = async () => {
+          if (sandbox) return sandbox;
+          const e2bKey = process.env["E2B_API_KEY"];
+          if (!e2bKey) throw new Error("E2B_API_KEY belum diatur");
+          if (body.sandboxId) {
+            try {
+              sandbox = await Sandbox.connect(body.sandboxId, { apiKey: e2bKey, timeoutMs: 15 * 60_000 });
+            } catch {
+              sandbox = null;
+            }
+          }
+          if (!sandbox) sandbox = await Sandbox.create({ apiKey: e2bKey, timeoutMs: 15 * 60_000 });
+          emit({ t: "sandbox", id: sandbox.sandboxId });
+          return sandbox;
+        };
+
+        const tools = {
+          run_command: tool({
+            description: "Jalankan perintah shell di sandbox Linux. Kembalikan stdout, stderr, dan exit code.",
+            inputSchema: z.object({ command: z.string().describe("Perintah bash yang akan dijalankan") }),
+            execute: async ({ command }) => {
+              try {
+                const sb = await getSandbox();
+                const r = await sb.commands.run(command, { timeoutMs: 120_000, cwd: "/home/user" });
+                return { exitCode: r.exitCode, stdout: clip(r.stdout), stderr: clip(r.stderr, 3000) };
+              } catch (err: unknown) {
+                const e = err as { exitCode?: number; stdout?: string; stderr?: string; message?: string };
+                if (typeof e.exitCode === "number")
+                  return { exitCode: e.exitCode, stdout: clip(e.stdout ?? ""), stderr: clip(e.stderr ?? "", 3000) };
+                return { exitCode: -1, stdout: "", stderr: e.message ?? String(err) };
+              }
+            },
+          }),
+          write_file: tool({
+            description: "Tulis file teks ke sandbox (path relatif terhadap /home/user atau absolut).",
+            inputSchema: z.object({ path: z.string(), content: z.string() }),
+            execute: async ({ path, content }) => {
+              try {
+                const sb = await getSandbox();
+                const p = path.startsWith("/") ? path : `/home/user/${path}`;
+                await sb.files.write(p, content);
+                return { ok: true, path: p, bytes: content.length };
+              } catch (err) {
+                return { ok: false, error: err instanceof Error ? err.message : String(err) };
+              }
+            },
+          }),
+        };
 
         const result = streamText({
           model: provider.chat(model),
           system: SYSTEM_PROMPT,
-          messages: await convertToModelMessages(messages),
+          messages: await convertToModelMessages(body.messages),
+          tools,
+          stopWhen: stepCountIs(8),
           abortSignal: request.signal,
-          // Ollama: turn off Qwen3 "thinking" (long hidden reasoning before any text)
           providerOptions: { openai: { reasoningEffort: "none" as never } },
         });
 
-        // Stream via fullStream so a provider failure surfaces as an explicit
-        // error part (textStream silently ends empty on connection errors).
-        const encoder = new TextEncoder();
         const stream = new ReadableStream<Uint8Array>({
           async start(controller) {
+            controllerRef = controller;
             try {
               for await (const part of result.fullStream) {
-                if (part.type === "text-delta") {
-                  controller.enqueue(encoder.encode(part.text));
-                } else if (part.type === "error") {
-                  const reason =
-                    part.error instanceof Error ? part.error.message : String(part.error);
-                  controller.enqueue(
-                    encoder.encode(
-                      `\n\n**Could not reach your AI server.** ${reason}\n\nCheck that the model server is running and the tunnel address is alive.`,
-                    ),
-                  );
-                  cachedUrl = null; // force re-resolve next time
+                if (part.type === "text-delta") emit({ t: "text", v: part.text });
+                else if (part.type === "tool-call")
+                  emit({ t: "tool", id: part.toolCallId, name: part.toolName, input: part.input });
+                else if (part.type === "tool-result")
+                  emit({ t: "result", id: part.toolCallId, output: part.output });
+                else if (part.type === "error") {
+                  const reason = part.error instanceof Error ? part.error.message : String(part.error);
+                  emit({ t: "error", v: `Tidak bisa menghubungi server AI. ${reason}` });
+                  cachedUrl = null;
                   break;
                 }
               }
             } catch (error) {
-              const reason = error instanceof Error ? error.message : "Unknown error";
-              controller.enqueue(
-                encoder.encode(
-                  `\n\n**Could not reach your AI server.** ${reason}\n\nCheck that the model server is running and the address is reachable.`,
-                ),
-              );
+              emit({ t: "error", v: error instanceof Error ? error.message : "Error tidak diketahui" });
             } finally {
+              controllerRef = null;
               controller.close();
             }
           },
         });
 
-
-        return new Response(stream, {
-          headers: { "Content-Type": "text/plain; charset=utf-8" },
-        });
+        return new Response(stream, { headers: { "Content-Type": "application/x-ndjson; charset=utf-8" } });
       },
     },
   },
