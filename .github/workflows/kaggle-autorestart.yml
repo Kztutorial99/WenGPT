@@ -29,11 +29,13 @@ jobs:
           UPSTASH_TOKEN: ${{ secrets.UPSTASH_TOKEN }}
         run: |
           if [ -z "$KAGGLE_USERNAME" ]; then echo "Akun $ACC belum diisi, lewati"; exit 0; fi
-          ALIVE=$(curl -s -H "Authorization: Bearer $UPSTASH_TOKEN" "$UPSTASH_URL/get/foundry:ai-url:$ACC" | python3 -c "import sys,json;print(json.load(sys.stdin).get('result') or '')")
+          ALIVE=$(curl -s -H "Authorization: Bearer $UPSTASH_TOKEN" "$UPSTASH_URL/get/foundry:ai-url:$ACC" | python3 -c "import sys,json
+try: print(json.load(sys.stdin).get('result') or '')
+except Exception: print('')")
           if [ "$FORCE" != "true" ] && [ -n "$ALIVE" ]; then echo "Akun $ACC hidup: $ALIVE"; exit 0; fi
           pip install -q kaggle
           SLUG="$KAGGLE_USERNAME/foundry-ai-server"
-          STATUS=$(kaggle kernels status "$SLUG" 2>/dev/null || true)
+          STATUS=$(kaggle kernels status "$SLUG" 2>&1 || true)
           echo "$STATUS"
           if [ "$FORCE" != "true" ] && echo "$STATUS" | grep -qiE "running|queued"; then echo "Masih menyala/loading, tunggu"; exit 0; fi
           mkdir -p /tmp/k && cd /tmp/k
