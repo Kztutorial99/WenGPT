@@ -280,7 +280,7 @@ export const MessageResponse = memo(
       plugins={streamdownPlugins}
       controls={{ code: false, table: false, mermaid: false }}
       lineNumbers={false}
-      components={{ pre: CodeBox }}
+      components={{ pre: CodeBox as never }}
       {...props}
     />
   ),
