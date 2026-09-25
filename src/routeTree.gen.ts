@@ -10,23 +10,21 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as FilesRouteImport } from './routes/files'
-import { Route as LinimasaRouteImport } from './routes/linimasa'
+import { Route as HistoryRouteImport } from './routes/history'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
+import { Route as ChatSessionIdRouteImport } from './routes/chat.$sessionId'
+import { Route as ChatSessionIdIndexRouteImport } from './routes/chat.$sessionId.index'
+import { Route as ChatSessionIdFilesRouteImport } from './routes/chat.$sessionId.files'
+import { Route as ChatSessionIdTimelineRouteImport } from './routes/chat.$sessionId.timeline'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const FilesRoute = FilesRouteImport.update({
-  id: '/files',
-  path: '/files',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LinimasaRoute = LinimasaRouteImport.update({
-  id: '/linimasa',
-  path: '/linimasa',
+const HistoryRoute = HistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiChatRoute = ApiChatRouteImport.update({
@@ -34,39 +32,88 @@ const ApiChatRoute = ApiChatRouteImport.update({
   path: '/api/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ChatSessionIdRoute = ChatSessionIdRouteImport.update({
+  id: '/chat/$sessionId',
+  path: '/chat/$sessionId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChatSessionIdIndexRoute = ChatSessionIdIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ChatSessionIdRoute,
+} as any)
+const ChatSessionIdFilesRoute = ChatSessionIdFilesRouteImport.update({
+  id: '/files',
+  path: '/files',
+  getParentRoute: () => ChatSessionIdRoute,
+} as any)
+const ChatSessionIdTimelineRoute = ChatSessionIdTimelineRouteImport.update({
+  id: '/timeline',
+  path: '/timeline',
+  getParentRoute: () => ChatSessionIdRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/files': typeof FilesRoute
-  '/linimasa': typeof LinimasaRoute
+  '/history': typeof HistoryRoute
   '/api/chat': typeof ApiChatRoute
+  '/chat/$sessionId': typeof ChatSessionIdRouteWithChildren
+  '/chat/$sessionId/files': typeof ChatSessionIdFilesRoute
+  '/chat/$sessionId/timeline': typeof ChatSessionIdTimelineRoute
+  '/chat/$sessionId/': typeof ChatSessionIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/files': typeof FilesRoute
-  '/linimasa': typeof LinimasaRoute
+  '/history': typeof HistoryRoute
   '/api/chat': typeof ApiChatRoute
+  '/chat/$sessionId/files': typeof ChatSessionIdFilesRoute
+  '/chat/$sessionId/timeline': typeof ChatSessionIdTimelineRoute
+  '/chat/$sessionId': typeof ChatSessionIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/files': typeof FilesRoute
-  '/linimasa': typeof LinimasaRoute
+  '/history': typeof HistoryRoute
   '/api/chat': typeof ApiChatRoute
+  '/chat/$sessionId': typeof ChatSessionIdRouteWithChildren
+  '/chat/$sessionId/files': typeof ChatSessionIdFilesRoute
+  '/chat/$sessionId/timeline': typeof ChatSessionIdTimelineRoute
+  '/chat/$sessionId/': typeof ChatSessionIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/files' | '/linimasa' | '/api/chat'
+  fullPaths:
+    | '/'
+    | '/history'
+    | '/api/chat'
+    | '/chat/$sessionId'
+    | '/chat/$sessionId/files'
+    | '/chat/$sessionId/timeline'
+    | '/chat/$sessionId/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/files' | '/linimasa' | '/api/chat'
-  id: '__root__' | '/' | '/files' | '/linimasa' | '/api/chat'
+  to:
+    | '/'
+    | '/history'
+    | '/api/chat'
+    | '/chat/$sessionId/files'
+    | '/chat/$sessionId/timeline'
+    | '/chat/$sessionId'
+  id:
+    | '__root__'
+    | '/'
+    | '/history'
+    | '/api/chat'
+    | '/chat/$sessionId'
+    | '/chat/$sessionId/files'
+    | '/chat/$sessionId/timeline'
+    | '/chat/$sessionId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  FilesRoute: typeof FilesRoute
-  LinimasaRoute: typeof LinimasaRoute
+  HistoryRoute: typeof HistoryRoute
   ApiChatRoute: typeof ApiChatRoute
+  ChatSessionIdRoute: typeof ChatSessionIdRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -78,18 +125,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/files': {
-      id: '/files'
-      path: '/files'
-      fullPath: '/files'
-      preLoaderRoute: typeof FilesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/linimasa': {
-      id: '/linimasa'
-      path: '/linimasa'
-      fullPath: '/linimasa'
-      preLoaderRoute: typeof LinimasaRouteImport
+    '/history': {
+      id: '/history'
+      path: '/history'
+      fullPath: '/history'
+      preLoaderRoute: typeof HistoryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/chat': {
@@ -99,14 +139,58 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/chat/$sessionId': {
+      id: '/chat/$sessionId'
+      path: '/chat/$sessionId'
+      fullPath: '/chat/$sessionId'
+      preLoaderRoute: typeof ChatSessionIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/chat/$sessionId/': {
+      id: '/chat/$sessionId/'
+      path: '/'
+      fullPath: '/chat/$sessionId/'
+      preLoaderRoute: typeof ChatSessionIdIndexRouteImport
+      parentRoute: typeof ChatSessionIdRoute
+    }
+    '/chat/$sessionId/files': {
+      id: '/chat/$sessionId/files'
+      path: '/files'
+      fullPath: '/chat/$sessionId/files'
+      preLoaderRoute: typeof ChatSessionIdFilesRouteImport
+      parentRoute: typeof ChatSessionIdRoute
+    }
+    '/chat/$sessionId/timeline': {
+      id: '/chat/$sessionId/timeline'
+      path: '/timeline'
+      fullPath: '/chat/$sessionId/timeline'
+      preLoaderRoute: typeof ChatSessionIdTimelineRouteImport
+      parentRoute: typeof ChatSessionIdRoute
+    }
   }
 }
 
+interface ChatSessionIdRouteChildren {
+  ChatSessionIdFilesRoute: typeof ChatSessionIdFilesRoute
+  ChatSessionIdTimelineRoute: typeof ChatSessionIdTimelineRoute
+  ChatSessionIdIndexRoute: typeof ChatSessionIdIndexRoute
+}
+
+const ChatSessionIdRouteChildren: ChatSessionIdRouteChildren = {
+  ChatSessionIdFilesRoute: ChatSessionIdFilesRoute,
+  ChatSessionIdTimelineRoute: ChatSessionIdTimelineRoute,
+  ChatSessionIdIndexRoute: ChatSessionIdIndexRoute,
+}
+
+const ChatSessionIdRouteWithChildren = ChatSessionIdRoute._addFileChildren(
+  ChatSessionIdRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  FilesRoute: FilesRoute,
-  LinimasaRoute: LinimasaRoute,
+  HistoryRoute: HistoryRoute,
   ApiChatRoute: ApiChatRoute,
+  ChatSessionIdRoute: ChatSessionIdRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -29,6 +29,7 @@ Aturan:
 - Script Python: setelah write_file, jalankan dulu \`python3 -m py_compile <file>\` sebelum menjalankannya. Untuk script interaktif, uji dengan input lewat pipe dan pastikan menangani EOF (try/except EOFError).
 - Jika error, BACA pesan error baris per baris, perbaiki akar masalahnya dengan menulis ulang file utuh lewat write_file, lalu uji ulang. Jangan umumkan hasil ke pengguna sebelum uji terakhir berhasil.
 - File dari sesi lain milik pengguna otomatis tersedia di sandbox (File Manager dipakai bersama semua sesi).
+- Lampiran pengguna berada di folder /home/user/attached_assets. Sebutkan nama, tipe, dan ukuran file sebelum menganalisis. Untuk file besar, lihat bagian yang relevan saja dengan tool shell dan jangan menampilkan seluruh isi.
 - Folder kerja: /home/user. Jangan jalankan perintah yang berjalan selamanya (server) tanpa '&' di belakang.`;
 
 // The "address book": the Kaggle notebook reports its current tunnel URL to a
@@ -36,7 +37,12 @@ Aturan:
 // URL from there on every chat request, so the app survives tunnel restarts
 // with no manual config changes. Falls back to the static AI_BASE_URL secret.
 // Several Kaggle accounts each report their own key; the first live one wins.
-const REGISTRY_KEYS = ["foundry:ai-url:1", "foundry:ai-url:2", "foundry:ai-url:3", "foundry:ai-url"];
+const REGISTRY_KEYS = [
+  "foundry:ai-url:1",
+  "foundry:ai-url:2",
+  "foundry:ai-url:3",
+  "foundry:ai-url",
+];
 
 const withV1 = (u: string) => {
   const base = u.replace(/\/+$/, "");
@@ -77,7 +83,9 @@ async function resolveAiBaseUrlUncached(): Promise<string> {
       signal: AbortSignal.timeout(3000),
     });
     const data = (await res.json()) as { result?: (string | null)[] };
-    const candidates = [...new Set((data.result ?? []).filter((u): u is string => !!u).map(withV1))];
+    const candidates = [
+      ...new Set((data.result ?? []).filter((u): u is string => !!u).map(withV1)),
+    ];
     if (candidates.length) {
       // Check all at once; pick the first account (in order) that answers.
       const alive = await Promise.all(candidates.map(isAlive));
@@ -90,9 +98,8 @@ async function resolveAiBaseUrlUncached(): Promise<string> {
   return fallback;
 }
 
-
-
-const clip = (s: string, n = 6000) => (s.length > n ? s.slice(0, n) + `\n...[dipotong ${s.length - n} karakter]` : s);
+const clip = (s: string, n = 6000) =>
+  s.length > n ? s.slice(0, n) + `\n...[dipotong ${s.length - n} karakter]` : s;
 
 type Ev =
   | { t: "text"; v: string }
@@ -122,13 +129,36 @@ export const Route = createFileRoute("/api/chat")({
         if (!apiKey) return chatError("Layanan AI belum siap. Silakan coba lagi sebentar.");
 
         type SharedFile = { path: string; content: string };
-        let body: { messages: UIMessage[]; sandboxId?: string | null; files?: SharedFile[] };
+        type Attachment = { path: string; mediaType: string; size: number; dataUrl: string };
+        let body: {
+          messages: UIMessage[];
+          sandboxId?: string | null;
+          files?: SharedFile[];
+          attachments?: Attachment[];
+        };
         try {
           body = (await request.json()) as typeof body;
         } catch {
           return chatError("Pesan tidak dapat dibaca. Silakan kirim ulang.");
         }
-        if (!Array.isArray(body.messages)) return chatError("Riwayat percakapan tidak valid. Silakan buat sesi baru.");
+        if (!Array.isArray(body.messages))
+          return chatError("Riwayat percakapan tidak valid. Silakan buat sesi baru.");
+        const attachmentSchema = z.object({
+          path: z.string().regex(/^\/home\/user\/attached_assets\/[a-zA-Z0-9._ -]{1,160}$/),
+          mediaType: z.string().max(200),
+          size: z
+            .number()
+            .int()
+            .nonnegative()
+            .max(20 * 1024 * 1024),
+          dataUrl: z.string().max(28 * 1024 * 1024),
+        });
+        const attachmentResult = z
+          .array(attachmentSchema)
+          .max(10)
+          .safeParse(body.attachments ?? []);
+        if (!attachmentResult.success)
+          return chatError("Lampiran tidak valid atau melebihi batas 20 MB.");
         const baseURL = await resolveAiBaseUrl();
         const provider = createOpenAI({ apiKey, baseURL });
         const model = process.env["AI_MODEL"] || "gpt-4o-mini";
@@ -145,7 +175,10 @@ export const Route = createFileRoute("/api/chat")({
           let reset = false;
           if (body.sandboxId) {
             try {
-              sandbox = await Sandbox.connect(body.sandboxId, { apiKey: e2bKey, timeoutMs: 15 * 60_000 });
+              sandbox = await Sandbox.connect(body.sandboxId, {
+                apiKey: e2bKey,
+                timeoutMs: 15 * 60_000,
+              });
             } catch {
               sandbox = null;
               reset = true;
@@ -153,12 +186,32 @@ export const Route = createFileRoute("/api/chat")({
           }
           if (!sandbox) sandbox = await Sandbox.create({ apiKey: e2bKey, timeoutMs: 15 * 60_000 });
           const shared = Array.isArray(body.files) ? body.files.slice(0, 40) : [];
-          await Promise.all(shared.map(async (f) => {
-            try {
-              if (typeof f?.path !== "string" || typeof f?.content !== "string" || f.content.length > 200_000) return;
-              if (!(await sandbox!.files.exists(f.path))) await sandbox!.files.write(f.path, f.content);
-            } catch { /* abaikan file yang gagal dipulihkan */ }
-          }));
+          await Promise.all(
+            shared.map(async (f) => {
+              try {
+                if (
+                  typeof f?.path !== "string" ||
+                  typeof f?.content !== "string" ||
+                  f.content.length > 200_000
+                )
+                  return;
+                if (!(await sandbox!.files.exists(f.path)))
+                  await sandbox!.files.write(f.path, f.content);
+              } catch {
+                /* abaikan file yang gagal dipulihkan */
+              }
+            }),
+          );
+          await Promise.all(
+            attachmentResult.data.map(async (file) => {
+              const comma = file.dataUrl.indexOf(",");
+              if (comma < 0) throw new Error(`Isi ${file.path} tidak valid.`);
+              const bytes = await (await fetch(file.dataUrl)).arrayBuffer();
+              if (bytes.byteLength !== file.size || bytes.byteLength > 20 * 1024 * 1024)
+                throw new Error(`Ukuran ${file.path} tidak valid.`);
+              await sandbox!.files.write(file.path, bytes);
+            }),
+          );
           if (reset) emit({ t: "sandbox_reset" });
           emit({ t: "sandbox", id: sandbox.sandboxId });
           return sandbox;
@@ -166,23 +219,40 @@ export const Route = createFileRoute("/api/chat")({
 
         const tools = {
           run_command: tool({
-            description: "Jalankan perintah shell di sandbox Linux. Kembalikan stdout, stderr, dan exit code.",
-            inputSchema: z.object({ command: z.string().describe("Perintah bash yang akan dijalankan") }),
+            description:
+              "Jalankan perintah shell di sandbox Linux. Kembalikan stdout, stderr, dan exit code.",
+            inputSchema: z.object({
+              command: z.string().describe("Perintah bash yang akan dijalankan"),
+            }),
             execute: async ({ command }) => {
               try {
                 const sb = await getSandbox();
                 const r = await sb.commands.run(command, { timeoutMs: 120_000, cwd: "/home/user" });
-                return { exitCode: r.exitCode, stdout: clip(r.stdout), stderr: clip(r.stderr, 3000) };
+                return {
+                  exitCode: r.exitCode,
+                  stdout: clip(r.stdout),
+                  stderr: clip(r.stderr, 3000),
+                };
               } catch (err: unknown) {
-                const e = err as { exitCode?: number; stdout?: string; stderr?: string; message?: string };
+                const e = err as {
+                  exitCode?: number;
+                  stdout?: string;
+                  stderr?: string;
+                  message?: string;
+                };
                 if (typeof e.exitCode === "number")
-                  return { exitCode: e.exitCode, stdout: clip(e.stdout ?? ""), stderr: clip(e.stderr ?? "", 3000) };
+                  return {
+                    exitCode: e.exitCode,
+                    stdout: clip(e.stdout ?? ""),
+                    stderr: clip(e.stderr ?? "", 3000),
+                  };
                 return { exitCode: -1, stdout: "", stderr: e.message ?? String(err) };
               }
             },
           }),
           write_file: tool({
-            description: "Tulis file teks ke sandbox (path relatif terhadap /home/user atau absolut).",
+            description:
+              "Tulis file teks ke sandbox (path relatif terhadap /home/user atau absolut).",
             inputSchema: z.object({ path: z.string(), content: z.string() }),
             execute: async ({ path, content }) => {
               try {
@@ -216,24 +286,38 @@ export const Route = createFileRoute("/api/chat")({
                 if (part.type === "text-delta") emit({ t: "text", v: part.text });
                 else if (part.type === "tool-input-start") {
                   emit({ t: "tool", id: part.id, name: part.toolName, input: {}, at: Date.now() });
-                }
-                else if (part.type === "tool-call") {
+                } else if (part.type === "tool-call") {
                   toolStartedAt.set(part.toolCallId, Date.now());
-                  emit({ t: "tool", id: part.toolCallId, name: part.toolName, input: part.input, at: Date.now() });
+                  emit({
+                    t: "tool",
+                    id: part.toolCallId,
+                    name: part.toolName,
+                    input: part.input,
+                    at: Date.now(),
+                  });
                 } else if (part.type === "tool-result") {
                   const at = Date.now();
                   const startedAt = toolStartedAt.get(part.toolCallId) ?? at;
-                  emit({ t: "result", id: part.toolCallId, output: part.output, at, durationMs: at - startedAt });
-                }
-                else if (part.type === "error") {
-                  const reason = part.error instanceof Error ? part.error.message : String(part.error);
+                  emit({
+                    t: "result",
+                    id: part.toolCallId,
+                    output: part.output,
+                    at,
+                    durationMs: at - startedAt,
+                  });
+                } else if (part.type === "error") {
+                  const reason =
+                    part.error instanceof Error ? part.error.message : String(part.error);
                   emit({ t: "error", v: `Tidak bisa menghubungi server AI. ${reason}` });
                   cachedUrl = null;
                   break;
                 }
               }
             } catch (error) {
-              emit({ t: "error", v: error instanceof Error ? error.message : "Error tidak diketahui" });
+              emit({
+                t: "error",
+                v: error instanceof Error ? error.message : "Error tidak diketahui",
+              });
             } finally {
               controllerRef = null;
               controller.close();

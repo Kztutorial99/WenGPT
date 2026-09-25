@@ -1,4 +1,12 @@
-export type ToolOut = { exitCode?: number; stdout?: string; stderr?: string; ok?: boolean; error?: string; path?: string; bytes?: number };
+export type ToolOut = {
+  exitCode?: number;
+  stdout?: string;
+  stderr?: string;
+  ok?: boolean;
+  error?: string;
+  path?: string;
+  bytes?: number;
+};
 export type ToolRun = {
   id: string;
   name: string;
@@ -9,23 +17,81 @@ export type ToolRun = {
   durationMs?: number;
 };
 export type Part = { type: "text"; text: string } | { type: "tool"; run: ToolRun };
-export type MessageData = { id: string; role: "user" | "assistant"; parts: Part[]; createdAt: number };
-export type ChatSession = { id: string; title: string; createdAt: number; updatedAt: number; sandboxId: string | null; messages: MessageData[] };
+export type MessageData = {
+  id: string;
+  role: "user" | "assistant";
+  parts: Part[];
+  createdAt: number;
+};
+export type ChatSession = {
+  id: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  sandboxId: string | null;
+  messages: MessageData[];
+};
 export type Checkpoint = { id: string; ask: string; startedAt: number; runs: ToolRun[] };
-export type SavedFile = { path: string; content: string; runId: string; ask: string; failed: boolean; updatedAt: number; sessionId?: string; sessionTitle?: string };
-type State = { ready: boolean; sessions: ChatSession[]; activeId: string | null; streamingIds: string[] };
+export type SavedFile = {
+  path: string;
+  content: string;
+  runId: string;
+  ask: string;
+  failed: boolean;
+  updatedAt: number;
+  sessionId?: string;
+  sessionTitle?: string;
+  attachmentId?: string;
+  mediaType?: string;
+  size?: number;
+  truncated?: boolean;
+};
+type ReadState = { files: number; history: number; timelines: Record<string, number> };
+type State = {
+  ready: boolean;
+  sessions: ChatSession[];
+  activeId: string | null;
+  streamingIds: string[];
+  attachments: SavedFile[];
+  read: ReadState;
+};
 
 const STORE = "wengpt:sessions:v2";
 const LEGACY = "wengpt:chat";
-let state: State = { ready: false, sessions: [], activeId: null, streamingIds: [] };
-const serverState: State = { ready: false, sessions: [], activeId: null, streamingIds: [] };
+const EMPTY_READ: ReadState = { files: 0, history: 0, timelines: {} };
+let state: State = {
+  ready: false,
+  sessions: [],
+  activeId: null,
+  streamingIds: [],
+  attachments: [],
+  read: EMPTY_READ,
+};
+const serverState: State = {
+  ready: false,
+  sessions: [],
+  activeId: null,
+  streamingIds: [],
+  attachments: [],
+  read: EMPTY_READ,
+};
 const listeners = new Set<() => void>();
 const controllers = new Map<string, AbortController>();
 
-function emit() { listeners.forEach((listener) => listener()); }
+function emit() {
+  listeners.forEach((listener) => listener());
+}
 function save() {
   if (typeof window === "undefined") return;
-  localStorage.setItem(STORE, JSON.stringify({ sessions: state.sessions, activeId: state.activeId }));
+  localStorage.setItem(
+    STORE,
+    JSON.stringify({
+      sessions: state.sessions,
+      activeId: state.activeId,
+      attachments: state.attachments,
+      read: state.read,
+    }),
+  );
 }
 function updateSessions(updater: (sessions: ChatSession[]) => ChatSession[]) {
   state = { ...state, sessions: updater(state.sessions) };
@@ -34,54 +100,146 @@ function updateSessions(updater: (sessions: ChatSession[]) => ChatSession[]) {
 }
 function newSession(): ChatSession {
   const now = Date.now();
-  return { id: crypto.randomUUID(), title: "Chat baru", createdAt: now, updatedAt: now, sandboxId: null, messages: [] };
+  return {
+    id: crypto.randomUUID(),
+    title: "Chat baru",
+    createdAt: now,
+    updatedAt: now,
+    sandboxId: null,
+    messages: [],
+  };
 }
 
 export function bootChatStore() {
   if (state.ready || typeof window === "undefined") return;
   let sessions: ChatSession[] = [];
   let activeId: string | null = null;
+  let attachments: SavedFile[] = [];
+  let read: ReadState = EMPTY_READ;
   try {
-    const stored = JSON.parse(localStorage.getItem(STORE) || "null") as { sessions?: ChatSession[]; activeId?: string } | null;
+    const stored = JSON.parse(localStorage.getItem(STORE) || "null") as {
+      sessions?: ChatSession[];
+      activeId?: string;
+      attachments?: SavedFile[];
+      read?: Partial<ReadState>;
+    } | null;
     if (Array.isArray(stored?.sessions)) sessions = stored.sessions;
     if (typeof stored?.activeId === "string") activeId = stored.activeId;
-  } catch { localStorage.removeItem(STORE); }
+    if (Array.isArray(stored?.attachments)) attachments = stored.attachments;
+    if (stored?.read)
+      read = {
+        files: stored.read.files ?? 0,
+        history: stored.read.history ?? 0,
+        timelines: stored.read.timelines ?? {},
+      };
+  } catch {
+    localStorage.removeItem(STORE);
+  }
   if (sessions.length === 0) {
     try {
-      const legacy = JSON.parse(localStorage.getItem(LEGACY) || "null") as { messages?: MessageData[]; sandboxId?: string } | null;
+      const legacy = JSON.parse(localStorage.getItem(LEGACY) || "null") as {
+        messages?: MessageData[];
+        sandboxId?: string;
+      } | null;
       if (Array.isArray(legacy?.messages) && legacy.messages.length) {
         const now = Date.now();
-        sessions = [{ id: crypto.randomUUID(), title: titleFrom(legacy.messages), createdAt: now, updatedAt: now, sandboxId: legacy.sandboxId ?? null, messages: legacy.messages.map((m) => ({ ...m, createdAt: m.createdAt ?? now })) }];
+        sessions = [
+          {
+            id: crypto.randomUUID(),
+            title: titleFrom(legacy.messages),
+            createdAt: now,
+            updatedAt: now,
+            sandboxId: legacy.sandboxId ?? null,
+            messages: legacy.messages.map((m) => ({ ...m, createdAt: m.createdAt ?? now })),
+          },
+        ];
       }
-    } catch { localStorage.removeItem(LEGACY); }
+    } catch {
+      localStorage.removeItem(LEGACY);
+    }
   }
   if (sessions.length === 0) sessions = [newSession()];
   if (!activeId || !sessions.some((s) => s.id === activeId)) activeId = sessions[0]?.id ?? null;
-  state = { ...state, ready: true, sessions, activeId };
-  save(); emit();
+  state = { ...state, ready: true, sessions, activeId, attachments, read };
+  save();
+  emit();
 }
 
-export function subscribe(listener: () => void) { listeners.add(listener); return () => listeners.delete(listener); }
-export function getSnapshot() { return state; }
-export function getServerSnapshot(): State { return serverState; }
-export function getSession(id: string) { return state.sessions.find((session) => session.id === id); }
-export function setActiveSession(id: string) { if (state.activeId !== id) { state = { ...state, activeId: id }; save(); emit(); } }
+export function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+export function getSnapshot() {
+  return state;
+}
+export function getServerSnapshot(): State {
+  return serverState;
+}
+export function getSession(id: string) {
+  return state.sessions.find((session) => session.id === id);
+}
+export function setActiveSession(id: string) {
+  if (state.activeId !== id) {
+    state = { ...state, activeId: id };
+    save();
+    emit();
+  }
+}
+export function markFilesRead() {
+  state = { ...state, read: { ...state.read, files: Date.now() } };
+  save();
+  emit();
+}
+export function markTimelineRead(id: string) {
+  state = {
+    ...state,
+    read: { ...state.read, timelines: { ...state.read.timelines, [id]: Date.now() } },
+  };
+  save();
+  emit();
+}
+export function markHistoryRead() {
+  state = { ...state, read: { ...state.read, history: Date.now() } };
+  save();
+  emit();
+}
 export function createSession() {
   const session = newSession();
   state = { ...state, sessions: [session, ...state.sessions], activeId: session.id };
-  save(); emit(); return session.id;
+  save();
+  emit();
+  return session.id;
 }
 export function deleteSession(id: string) {
-  controllers.get(id)?.abort(); controllers.delete(id);
+  controllers.get(id)?.abort();
+  controllers.delete(id);
+  const attachmentIds = state.attachments
+    .filter((file) => file.sessionId === id)
+    .flatMap((file) => (file.attachmentId ? [file.attachmentId] : []));
+  if (attachmentIds.length)
+    void import("./attachment-store").then(({ removeAttachments }) =>
+      removeAttachments(attachmentIds),
+    );
   let sessions = state.sessions.filter((session) => session.id !== id);
   if (!sessions.length) sessions = [newSession()];
-  const activeId = state.activeId === id ? sessions[0]?.id ?? null : state.activeId;
-  state = { ...state, sessions, activeId, streamingIds: state.streamingIds.filter((value) => value !== id) };
-  save(); emit();
+  const activeId = state.activeId === id ? (sessions[0]?.id ?? null) : state.activeId;
+  state = {
+    ...state,
+    sessions,
+    activeId,
+    attachments: state.attachments.filter((file) => file.sessionId !== id),
+    streamingIds: state.streamingIds.filter((value) => value !== id),
+  };
+  save();
+  emit();
   return activeId;
 }
-export function stopSession(id: string) { controllers.get(id)?.abort(); }
-export function isStreaming(id: string) { return state.streamingIds.includes(id); }
+export function stopSession(id: string) {
+  controllers.get(id)?.abort();
+}
+export function isStreaming(id: string) {
+  return state.streamingIds.includes(id);
+}
 
 function titleFrom(messages: MessageData[]) {
   const first = messages.find((m) => m.role === "user")?.parts.find((p) => p.type === "text");
@@ -90,95 +248,326 @@ function titleFrom(messages: MessageData[]) {
 }
 function summarizeTool(part: Extract<Part, { type: "tool" }>) {
   const { name, input, output } = part.run;
-  if (name === "write_file") return output?.ok === false ? `(Gagal menulis ${input.path}: ${output.error ?? "error"})` : `(File ${input.path} berhasil ditulis.)`;
-  const result = output ? `exit ${output.exitCode ?? "?"}\n${(output.stdout || output.stderr || "").slice(0, 500)}` : "belum selesai";
+  if (name === "write_file")
+    return output?.ok === false
+      ? `(Gagal menulis ${input.path}: ${output.error ?? "error"})`
+      : `(File ${input.path} berhasil ditulis.)`;
+  const result = output
+    ? `exit ${output.exitCode ?? "?"}\n${(output.stdout || output.stderr || "").slice(0, 500)}`
+    : "belum selesai";
   return `(Perintah ${String(input.command ?? "").slice(0, 250)} — ${result})`;
 }
-function messageText(message: MessageData) { return message.parts.map((part) => part.type === "text" ? part.text : `\n${summarizeTool(part)}\n`).join(""); }
-function patchSession(id: string, updater: (session: ChatSession) => ChatSession) {
-  updateSessions((sessions) => sessions.map((session) => session.id === id ? updater(session) : session));
+function messageText(message: MessageData) {
+  return message.parts
+    .map((part) => (part.type === "text" ? part.text : `\n${summarizeTool(part)}\n`))
+    .join("");
 }
-function patchAssistant(sessionId: string, assistantId: string, updater: (parts: Part[]) => Part[]) {
-  patchSession(sessionId, (session) => ({ ...session, updatedAt: Date.now(), messages: session.messages.map((message) => message.id === assistantId ? { ...message, parts: updater(message.parts) } : message) }));
+function patchSession(id: string, updater: (session: ChatSession) => ChatSession) {
+  updateSessions((sessions) =>
+    sessions.map((session) => (session.id === id ? updater(session) : session)),
+  );
+}
+function patchAssistant(
+  sessionId: string,
+  assistantId: string,
+  updater: (parts: Part[]) => Part[],
+) {
+  patchSession(sessionId, (session) => ({
+    ...session,
+    updatedAt: Date.now(),
+    messages: session.messages.map((message) =>
+      message.id === assistantId ? { ...message, parts: updater(message.parts) } : message,
+    ),
+  }));
 }
 
-export async function sendMessage(sessionId: string, raw: string) {
+type PendingAttachment = { filename?: string; mediaType?: string; url: string };
+const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+const PREVIEW_CHARS = 16_000;
+function safeFileName(value: string) {
+  return (
+    value
+      .replaceAll("\\", "/")
+      .split("/")
+      .pop()
+      ?.replace(/[^a-zA-Z0-9._ -]/g, "_")
+      .slice(0, 160) || "file"
+  );
+}
+function isTextFile(type: string, filename: string) {
+  return (
+    type.startsWith("text/") ||
+    /\.(?:txt|md|csv|json|ya?ml|toml|xml|html?|css|js|jsx|ts|tsx|py|rb|go|rs|java|c|cpp|h|hpp|sh|sql|log)$/i.test(
+      filename,
+    )
+  );
+}
+
+async function persistAttachments(session: ChatSession, incoming: PendingAttachment[]) {
+  if (!incoming.length) return [];
+  const { saveAttachment } = await import("./attachment-store");
+  const saved: SavedFile[] = [];
+  for (const item of incoming.slice(0, 10)) {
+    const response = await fetch(item.url);
+    const blob = await response.blob();
+    if (blob.size > MAX_ATTACHMENT_BYTES)
+      throw new Error(`${item.filename ?? "File"} melebihi batas 20 MB.`);
+    const filename = safeFileName(item.filename ?? "file");
+    const id = crypto.randomUUID();
+    const mediaType = item.mediaType || blob.type || "application/octet-stream";
+    const fullText = isTextFile(mediaType, filename) ? await blob.text() : "";
+    await saveAttachment(id, blob);
+    saved.push({
+      path: `/home/user/attached_assets/${filename}`,
+      content: fullText.slice(0, PREVIEW_CHARS),
+      runId: `attachment:${id}`,
+      ask: "Lampiran pengguna",
+      failed: false,
+      updatedAt: Date.now(),
+      sessionId: session.id,
+      sessionTitle: session.title,
+      attachmentId: id,
+      mediaType,
+      size: blob.size,
+      truncated: fullText.length > PREVIEW_CHARS,
+    });
+  }
+  state = { ...state, attachments: [...saved, ...state.attachments] };
+  save();
+  emit();
+  return saved;
+}
+
+async function attachmentPayload(files: SavedFile[]) {
+  const { blobToDataUrl, loadAttachment } = await import("./attachment-store");
+  const result: { path: string; mediaType: string; size: number; dataUrl: string }[] = [];
+  for (const file of files) {
+    if (!file.attachmentId) continue;
+    const blob = await loadAttachment(file.attachmentId);
+    if (blob)
+      result.push({
+        path: file.path,
+        mediaType: file.mediaType ?? blob.type,
+        size: file.size ?? blob.size,
+        dataUrl: await blobToDataUrl(blob),
+      });
+  }
+  return result;
+}
+
+export async function sendMessage(
+  sessionId: string,
+  raw: string,
+  incoming: PendingAttachment[] = [],
+) {
   const prompt = raw.trim();
   const session = getSession(sessionId);
-  if (!prompt || !session || isStreaming(sessionId)) return;
+  if ((!prompt && !incoming.length) || !session || isStreaming(sessionId)) return;
+  const newlyAttached = await persistAttachments(session, incoming);
+  const attachmentNote = newlyAttached.length
+    ? `\n\n[Lampiran pengguna]\n${newlyAttached.map((file) => `- ${file.path.replace("/home/user/", "")} (${file.mediaType}, ${file.size} byte)${file.content ? `\n  Cuplikan isi:\n${file.content}` : "\n  File biner tersedia di sandbox untuk diperiksa dengan tool."}`).join("\n")}`
+    : "";
+  const visiblePrompt =
+    prompt || `Analisis ${newlyAttached.length === 1 ? "file ini" : "file-file ini"}.`;
   const now = Date.now();
-  const user: MessageData = { id: crypto.randomUUID(), role: "user", parts: [{ type: "text", text: prompt }], createdAt: now };
-  const assistant: MessageData = { id: crypto.randomUUID(), role: "assistant", parts: [], createdAt: now + 1 };
+  const user: MessageData = {
+    id: crypto.randomUUID(),
+    role: "user",
+    parts: [{ type: "text", text: visiblePrompt }],
+    createdAt: now,
+  };
+  const assistant: MessageData = {
+    id: crypto.randomUUID(),
+    role: "assistant",
+    parts: [],
+    createdAt: now + 1,
+  };
   const history = [...session.messages, user];
-  patchSession(sessionId, (current) => ({ ...current, title: current.messages.length ? current.title : titleFrom([user]), updatedAt: now, messages: [...history, assistant] }));
+  patchSession(sessionId, (current) => ({
+    ...current,
+    title: current.messages.length ? current.title : titleFrom([user]),
+    updatedAt: now,
+    messages: [...history, assistant],
+  }));
   const controller = new AbortController();
   controllers.set(sessionId, controller);
-  state = { ...state, streamingIds: [...state.streamingIds, sessionId] }; emit();
+  state = { ...state, streamingIds: [...state.streamingIds, sessionId] };
+  emit();
   try {
     const response = await fetch("/api/chat", {
-      method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.signal,
-      body: JSON.stringify({ sessionId, sandboxId: session.sandboxId, files: loadAllFiles().filter((file) => !file.failed && file.sessionId !== sessionId).slice(0, 40).map(({ path, content }) => ({ path, content })), messages: history.slice(-16).map((message) => ({ id: message.id, role: message.role, parts: [{ type: "text", text: messageText(message) }] })) }),
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
+      body: JSON.stringify({
+        sessionId,
+        sandboxId: session.sandboxId,
+        files: loadAllFiles()
+          .filter((file) => !file.failed && !file.attachmentId)
+          .slice(0, 40)
+          .map(({ path, content }) => ({ path, content })),
+        attachments: await attachmentPayload(state.attachments.slice(0, 10)),
+        messages: history.slice(-16).map((message) => ({
+          id: message.id,
+          role: message.role,
+          parts: [
+            {
+              type: "text",
+              text:
+                message.id === user.id
+                  ? messageText(message) + attachmentNote
+                  : messageText(message),
+            },
+          ],
+        })),
+      }),
     });
-    if (!response.ok || !response.body) throw new Error((await response.text()) || "WenGPT tidak merespons.");
-    const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = "";
+    if (!response.ok || !response.body)
+      throw new Error((await response.text()) || "WenGPT tidak merespons.");
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
     for (;;) {
-      const { done, value } = await reader.read(); if (done) break;
+      const { done, value } = await reader.read();
+      if (done) break;
       buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n"); buffer = lines.pop() ?? "";
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
       for (const line of lines) {
         if (!line.trim()) continue;
         const event = JSON.parse(line) as { t: string; [key: string]: unknown };
         if (event.t === "text" || event.t === "error") {
-          const valueText = event.t === "error" ? `\n\n**${String(event['v'])}**` : String(event['v'] ?? "");
+          const valueText =
+            event.t === "error" ? `\n\n**${String(event["v"])}**` : String(event["v"] ?? "");
           patchAssistant(sessionId, assistant.id, (parts) => {
             const last = parts.at(-1);
-            return last?.type === "text" ? [...parts.slice(0, -1), { type: "text", text: last.text + valueText }] : [...parts, { type: "text", text: valueText }];
+            return last?.type === "text"
+              ? [...parts.slice(0, -1), { type: "text", text: last.text + valueText }]
+              : [...parts, { type: "text", text: valueText }];
           });
         } else if (event.t === "sandbox") {
-          patchSession(sessionId, (current) => ({ ...current, sandboxId: String(event['id']) }));
+          patchSession(sessionId, (current) => ({ ...current, sandboxId: String(event["id"]) }));
         } else if (event.t === "sandbox_reset") {
-          patchAssistant(sessionId, assistant.id, (parts) => [...parts, { type: "text", text: "\n\n> Sandbox sesi sebelumnya sudah berakhir. Saya membuat lingkungan baru; paket sementara perlu dipasang ulang.\n\n" }]);
+          patchAssistant(sessionId, assistant.id, (parts) => [
+            ...parts,
+            {
+              type: "text",
+              text: "\n\n> Sandbox sesi sebelumnya sudah berakhir. Saya membuat lingkungan baru; paket sementara perlu dipasang ulang.\n\n",
+            },
+          ]);
         } else if (event.t === "tool") {
-          const id = String(event['id']); const input = (event['input'] ?? {}) as ToolRun["input"];
-          patchAssistant(sessionId, assistant.id, (parts) => parts.some((part) => part.type === "tool" && part.run.id === id)
-            ? parts.map((part) => part.type === "tool" && part.run.id === id ? { type: "tool", run: { ...part.run, input, startedAt: Number(event['at']) || part.run.startedAt } } : part)
-            : [...parts, { type: "tool", run: { id, name: String(event['name']), input, startedAt: Number(event['at']) || Date.now() } }]);
+          const id = String(event["id"]);
+          const input = (event["input"] ?? {}) as ToolRun["input"];
+          patchAssistant(sessionId, assistant.id, (parts) =>
+            parts.some((part) => part.type === "tool" && part.run.id === id)
+              ? parts.map((part) =>
+                  part.type === "tool" && part.run.id === id
+                    ? {
+                        type: "tool",
+                        run: {
+                          ...part.run,
+                          input,
+                          startedAt: Number(event["at"]) || part.run.startedAt,
+                        },
+                      }
+                    : part,
+                )
+              : [
+                  ...parts,
+                  {
+                    type: "tool",
+                    run: {
+                      id,
+                      name: String(event["name"]),
+                      input,
+                      startedAt: Number(event["at"]) || Date.now(),
+                    },
+                  },
+                ],
+          );
         } else if (event.t === "result") {
-          patchAssistant(sessionId, assistant.id, (parts) => parts.map((part) => part.type === "tool" && part.run.id === event['id'] ? { type: "tool", run: { ...part.run, output: event['output'] as ToolOut, finishedAt: Number(event['at']) || Date.now(), ...(Number(event['durationMs']) ? { durationMs: Number(event['durationMs']) } : {}) } } : part));
+          patchAssistant(sessionId, assistant.id, (parts) =>
+            parts.map((part) =>
+              part.type === "tool" && part.run.id === event["id"]
+                ? {
+                    type: "tool",
+                    run: {
+                      ...part.run,
+                      output: event["output"] as ToolOut,
+                      finishedAt: Number(event["at"]) || Date.now(),
+                      ...(Number(event["durationMs"])
+                        ? { durationMs: Number(event["durationMs"]) }
+                        : {}),
+                    },
+                  }
+                : part,
+            ),
+          );
         }
       }
     }
   } catch (error) {
-    if ((error as Error).name !== "AbortError") patchAssistant(sessionId, assistant.id, (parts) => [...parts, { type: "text", text: `\n\n**${(error as Error).message}**` }]);
+    if ((error as Error).name !== "AbortError")
+      patchAssistant(sessionId, assistant.id, (parts) => [
+        ...parts,
+        { type: "text", text: `\n\n**${(error as Error).message}**` },
+      ]);
   } finally {
     controllers.delete(sessionId);
-    state = { ...state, streamingIds: state.streamingIds.filter((id) => id !== sessionId) }; save(); emit();
+    state = { ...state, streamingIds: state.streamingIds.filter((id) => id !== sessionId) };
+    save();
+    emit();
   }
 }
 
 export function loadCheckpoints(sessionId: string): Checkpoint[] {
-  const list: Checkpoint[] = []; let current: Checkpoint | null = null;
+  const list: Checkpoint[] = [];
+  let current: Checkpoint | null = null;
   for (const message of getSession(sessionId)?.messages ?? []) {
-    if (message.role === "user") { const part = message.parts.find((p) => p.type === "text"); current = { id: message.id, ask: part?.type === "text" ? part.text : "", startedAt: message.createdAt, runs: [] }; list.push(current); continue; }
-    for (const part of message.parts) if (part.type === "tool" && current) current.runs.push(part.run);
+    if (message.role === "user") {
+      const part = message.parts.find((p) => p.type === "text");
+      current = {
+        id: message.id,
+        ask: part?.type === "text" ? part.text : "",
+        startedAt: message.createdAt,
+        runs: [],
+      };
+      list.push(current);
+      continue;
+    }
+    for (const part of message.parts)
+      if (part.type === "tool" && current) current.runs.push(part.run);
   }
   return list.filter((checkpoint) => checkpoint.runs.length);
 }
-export function normalizePath(path: string) { return path.startsWith("/") ? path : `/home/user/${path}`; }
+export function normalizePath(path: string) {
+  return path.startsWith("/") ? path : `/home/user/${path}`;
+}
 export function loadFiles(sessionId: string): SavedFile[] {
   const map = new Map<string, SavedFile>();
-  for (const checkpoint of loadCheckpoints(sessionId)) for (const run of checkpoint.runs) {
-    if (run.name !== "write_file" || !run.input.path) continue;
-    const path = normalizePath(run.input.path); map.delete(path);
-    map.set(path, { path, content: String(run.input.content ?? ""), runId: run.id, ask: checkpoint.ask, failed: run.output?.ok === false, updatedAt: run.finishedAt ?? run.startedAt });
-  }
+  for (const checkpoint of loadCheckpoints(sessionId))
+    for (const run of checkpoint.runs) {
+      if (run.name !== "write_file" || !run.input.path) continue;
+      const path = normalizePath(run.input.path);
+      map.delete(path);
+      map.set(path, {
+        path,
+        content: String(run.input.content ?? ""),
+        runId: run.id,
+        ask: checkpoint.ask,
+        failed: run.output?.ok === false,
+        updatedAt: run.finishedAt ?? run.startedAt,
+      });
+    }
   return [...map.values()].reverse();
 }
 export function loadAllFiles(): SavedFile[] {
   const map = new Map<string, SavedFile>();
-  for (const session of state.sessions) for (const file of loadFiles(session.id)) {
-    const prev = map.get(file.path);
-    if (!prev || prev.updatedAt < file.updatedAt) map.set(file.path, { ...file, sessionId: session.id, sessionTitle: session.title });
-  }
+  for (const file of state.attachments) map.set(file.path, file);
+  for (const session of state.sessions)
+    for (const file of loadFiles(session.id)) {
+      const prev = map.get(file.path);
+      if (!prev || prev.updatedAt < file.updatedAt)
+        map.set(file.path, { ...file, sessionId: session.id, sessionTitle: session.title });
+    }
   return [...map.values()].sort((a, b) => b.updatedAt - a.updatedAt);
 }

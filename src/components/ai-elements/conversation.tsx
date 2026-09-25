@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import type { UIMessage } from "ai";
 import { ArrowDownIcon, DownloadIcon } from "lucide-react";
 import type { ComponentProps } from "react";
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { StickToBottom, useStickToBottomContext } from "use-stick-to-bottom";
 
 export type ConversationProps = ComponentProps<typeof StickToBottom>;
@@ -89,6 +89,17 @@ export const ConversationScrollButton = ({
     )
   );
 };
+
+export function ConversationScrollOnComplete({ streaming }: { streaming: boolean }) {
+  const { scrollToBottom } = useStickToBottomContext();
+  const previous = useRef(streaming);
+  useEffect(() => {
+    if (previous.current && !streaming)
+      scrollToBottom({ animation: "smooth", ignoreEscapes: true });
+    previous.current = streaming;
+  }, [scrollToBottom, streaming]);
+  return null;
+}
 
 const getMessageText = (message: UIMessage): string =>
   message.parts
