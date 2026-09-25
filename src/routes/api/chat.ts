@@ -14,7 +14,11 @@ Kamu juga punya sandbox Linux (Ubuntu, Python 3, Node.js, pip, npm tersedia, aks
 
 Aturan:
 - Pakai tool HANYA jika memang perlu menjalankan/menguji sesuatu atau pengguna memintanya. Untuk obrolan biasa, jawab langsung.
+- Sebelum memanggil tool pertama, WAJIB kirim satu kalimat singkat tentang apa yang akan kamu kerjakan. Jangan membuat pengguna menatap layar kosong.
 - Setelah tool selesai, jelaskan hasilnya singkat dan jelas.
+- Jangan menyatakan pekerjaan berhasil hanya karena perintah selesai. Baca stdout, stderr, dan exit code; jika gagal, cari akar masalah, perbaiki, lalu uji ulang.
+- Untuk script atau file yang bisa dijalankan, lakukan pengujian nyata setelah menulis file. Berhenti setelah maksimal 3 percobaan perbaikan dan jelaskan kendalanya jika belum berhasil.
+- Jangan tampilkan JSON tool mentah atau menuliskan format pemanggilan tool sebagai teks.
 - Tulis jawaban yang rapi dan mudah dipindai. Gunakan Markdown secara wajar: judul pendek hanya saat membantu, paragraf ringkas, daftar untuk langkah atau pilihan, dan blok kode dengan nama bahasa.
 - Jangan menumpuk judul, mengulang kesimpulan, atau memakai tanda baca berlebihan. Jangan mengarang hasil tool.
 - Untuk Bahasa Indonesia, gunakan ejaan dan tanda baca yang natural. Sesuaikan tingkat teknis dengan cara pengguna berbicara.
@@ -87,6 +91,7 @@ const clip = (s: string, n = 6000) => (s.length > n ? s.slice(0, n) + `\n...[dip
 type Ev =
   | { t: "text"; v: string }
   | { t: "sandbox"; id: string }
+  | { t: "sandbox_reset" }
   | { t: "tool"; id: string; name: string; input: unknown }
   | { t: "result"; id: string; output: unknown }
   | { t: "error"; v: string };
@@ -112,14 +117,17 @@ export const Route = createFileRoute("/api/chat")({
           if (sandbox) return sandbox;
           const e2bKey = process.env["E2B_API_KEY"];
           if (!e2bKey) throw new Error("E2B_API_KEY belum diatur");
+          let reset = false;
           if (body.sandboxId) {
             try {
               sandbox = await Sandbox.connect(body.sandboxId, { apiKey: e2bKey, timeoutMs: 15 * 60_000 });
             } catch {
               sandbox = null;
+              reset = true;
             }
           }
           if (!sandbox) sandbox = await Sandbox.create({ apiKey: e2bKey, timeoutMs: 15 * 60_000 });
+          if (reset) emit({ t: "sandbox_reset" });
           emit({ t: "sandbox", id: sandbox.sandboxId });
           return sandbox;
         };
@@ -167,16 +175,21 @@ export const Route = createFileRoute("/api/chat")({
           providerOptions: { openai: { reasoningEffort: "none" as never } },
         });
 
+        const toolStartedAt = new Map<string, number>();
         const stream = new ReadableStream<Uint8Array>({
           async start(controller) {
             controllerRef = controller;
             try {
               for await (const part of result.fullStream) {
                 if (part.type === "text-delta") emit({ t: "text", v: part.text });
-                else if (part.type === "tool-call")
-                  emit({ t: "tool", id: part.toolCallId, name: part.toolName, input: part.input });
-                else if (part.type === "tool-result")
-                  emit({ t: "result", id: part.toolCallId, output: part.output });
+                else if (part.type === "tool-call") {
+                  toolStartedAt.set(part.toolCallId, Date.now());
+                  emit({ t: "tool", id: part.toolCallId, name: part.toolName, input: part.input, at: Date.now() } as Ev);
+                } else if (part.type === "tool-result") {
+                  const at = Date.now();
+                  const startedAt = toolStartedAt.get(part.toolCallId) ?? at;
+                  emit({ t: "result", id: part.toolCallId, output: part.output, at, durationMs: at - startedAt } as Ev);
+                }
                 else if (part.type === "error") {
                   const reason = part.error instanceof Error ? part.error.message : String(part.error);
                   emit({ t: "error", v: `Tidak bisa menghubungi server AI. ${reason}` });
