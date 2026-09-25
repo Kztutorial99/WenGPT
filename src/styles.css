@@ -178,6 +178,30 @@
     background: oklch(0.79 0.165 62 / 0.3);
   }
 
+  /* Hilangkan efek "lengket" hover setelah tap di layar sentuh. */
+  @media (hover: none) {
+    button:hover,
+    a:hover,
+    [role="button"]:hover {
+      background-color: revert !important;
+      color: revert !important;
+    }
+  }
+
+  /* Hilangkan highlight biru saat tap di mobile browser. */
+  button,
+  a,
+  [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Selalu tampilkan tombol hapus di layar sentuh. */
+  @media (hover: none) {
+    .wengpt-msg-del {
+      opacity: 1 !important;
+    }
+  }
+
   ::-webkit-scrollbar {
     width: 10px;
     height: 10px;

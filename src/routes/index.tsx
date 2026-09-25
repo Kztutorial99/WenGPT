@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Bot, ChevronRight, FileText, FolderOpen, History, Plus, Terminal } from "lucide-react";
+import { Bot, ChevronRight, FileText, FolderOpen, History, Plus, Terminal, X } from "lucide-react";
 import { useViewportBox } from "@/lib/viewport";
 import {
   Conversation,
@@ -45,13 +45,26 @@ const STARTERS = [
   "Jelaskan perbedaan REST dan GraphQL",
 ];
 
+// Serialize tool activity as natural prose so the model reads it as context,
+// not as a template to imitate (never emit `Tool <name>: {json}` verbatim).
+function summarizeTool(part: Extract<Part, { type: "tool" }>): string {
+  const { name, input, output } = part.run;
+  if (name === "write_file") {
+    const path = String(input.path ?? "file");
+    if (output?.ok === false) return `(Gagal menulis file ${path}: ${output.error ?? "error"})`;
+    return `(Sudah menulis file ${path}.)`;
+  }
+  const cmd = String(input.command ?? "").slice(0, 200);
+  if (!output) return `(Menjalankan perintah: ${cmd})`;
+  const exit = typeof output.exitCode === "number" ? output.exitCode : "?";
+  const out = (output.stdout ?? "").trim().slice(0, 400);
+  const err = (output.stderr ?? "").trim().slice(0, 200);
+  const tail = out || err ? `\nOutput:\n${out}${err ? `\nStderr: ${err}` : ""}` : "";
+  return `(Perintah: ${cmd} — exit ${exit})${tail}`;
+}
+
 function toText(message: MessageData): string {
-  return message.parts
-    .map((part) => {
-      if (part.type === "text") return part.text;
-      return `\n[Tool ${part.run.name}: ${JSON.stringify(part.run.input).slice(0, 300)} → ${JSON.stringify(part.run.output ?? {}).slice(0, 800)}]\n`;
-    })
-    .join("");
+  return message.parts.map((part) => (part.type === "text" ? part.text : `\n${summarizeTool(part)}\n`)).join("");
 }
 
 function ToolCard({ run }: { run: ToolRun }) {
@@ -116,7 +129,8 @@ function Chat() {
         signal: controller.signal,
         body: JSON.stringify({
           sandboxId,
-          messages: history.map((message) => ({ id: message.id, role: message.role, parts: [{ type: "text", text: toText(message) }] })),
+          // Kirim maksimal 12 pesan terakhir agar respons cepat & konteks tidak membludak.
+          messages: history.slice(-12).map((message) => ({ id: message.id, role: message.role, parts: [{ type: "text", text: toText(message) }] })),
         }),
       });
       if (!response.ok || !response.body) throw new Error((await response.text()) || "WenGPT tidak merespons.");
@@ -161,6 +175,10 @@ function Chat() {
     setInput("");
     localStorage.removeItem(STORE);
     inputRef.current?.focus();
+  };
+
+  const deleteMessage = (id: string) => {
+    setMessages((current) => current.filter((message) => message.id !== id));
   };
 
   const box = useViewportBox();
@@ -211,8 +229,10 @@ function Chat() {
                 ))}
               </div>
             </section>
-          ) : messages.map((message) => (
-            <Message key={message.id} from={message.role} className="min-w-0 max-w-full">
+          ) : messages.map((message) => {
+            const isStreamingThis = streaming && message.id === last?.id;
+            return (
+            <Message key={message.id} from={message.role} className="wengpt-msg group relative min-w-0 max-w-full">
               {message.role === "assistant" && (
                 <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
                   <span className="grid size-6 place-items-center rounded-sm border border-border/70 bg-card"><Bot className="size-3.5 text-primary" /></span>
@@ -221,12 +241,24 @@ function Chat() {
               )}
               <MessageContent className={message.role === "user" ? "max-w-[88%] overflow-visible rounded-2xl rounded-tr-sm bg-primary px-4 py-3 text-primary-foreground shadow-user sm:max-w-[75%]" : "w-full overflow-visible"}>
                 {message.parts.map((part, index) => part.type === "text"
-                  ? <MessageResponse key={`${message.id}-${index}`} isAnimating={streaming && message.id === last?.id} className="wengpt-markdown min-w-0 max-w-full">{part.text}</MessageResponse>
+                  ? <MessageResponse key={`${message.id}-${index}`} isAnimating={isStreamingThis} className="wengpt-markdown min-w-0 max-w-full">{part.text}</MessageResponse>
                   : <ToolCard key={part.run.id} run={part.run} />)}
                 {waiting && message.id === last?.id && <Shimmer className="text-sm">WenGPT sedang berpikir…</Shimmer>}
               </MessageContent>
+              {!isStreamingThis && (
+                <button
+                  type="button"
+                  onClick={() => deleteMessage(message.id)}
+                  aria-label="Hapus pesan"
+                  title="Hapus pesan"
+                  className="wengpt-msg-del absolute top-0 right-0 grid size-7 place-items-center rounded-md border border-border/60 bg-card/80 text-muted-foreground opacity-0 backdrop-blur-md transition hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
+                >
+                  <X className="size-3.5" />
+                </button>
+              )}
             </Message>
-          ))}
+            );
+          })}
         </ConversationContent>
         <ConversationScrollButton className="bottom-3 z-30 size-9 border-border/70 bg-card/90 shadow-panel backdrop-blur-xl" aria-label="Kembali ke pesan terbaru" />
       </Conversation>
