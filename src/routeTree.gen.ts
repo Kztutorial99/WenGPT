@@ -10,12 +10,18 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as FilesRouteImport } from './routes/files'
 import { Route as LinimasaRouteImport } from './routes/linimasa'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FilesRoute = FilesRouteImport.update({
+  id: '/files',
+  path: '/files',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LinimasaRoute = LinimasaRouteImport.update({
@@ -31,30 +37,34 @@ const ApiChatRoute = ApiChatRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/files': typeof FilesRoute
   '/linimasa': typeof LinimasaRoute
   '/api/chat': typeof ApiChatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/files': typeof FilesRoute
   '/linimasa': typeof LinimasaRoute
   '/api/chat': typeof ApiChatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/files': typeof FilesRoute
   '/linimasa': typeof LinimasaRoute
   '/api/chat': typeof ApiChatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/linimasa' | '/api/chat'
+  fullPaths: '/' | '/files' | '/linimasa' | '/api/chat'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/linimasa' | '/api/chat'
-  id: '__root__' | '/' | '/linimasa' | '/api/chat'
+  to: '/' | '/files' | '/linimasa' | '/api/chat'
+  id: '__root__' | '/' | '/files' | '/linimasa' | '/api/chat'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  FilesRoute: typeof FilesRoute
   LinimasaRoute: typeof LinimasaRoute
   ApiChatRoute: typeof ApiChatRoute
 }
@@ -66,6 +76,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/files': {
+      id: '/files'
+      path: '/files'
+      fullPath: '/files'
+      preLoaderRoute: typeof FilesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/linimasa': {
@@ -87,6 +104,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  FilesRoute: FilesRoute,
   LinimasaRoute: LinimasaRoute,
   ApiChatRoute: ApiChatRoute,
 }

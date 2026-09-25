@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Bot, ChevronRight, FileText, History, Plus, Terminal } from "lucide-react";
+import { Bot, ChevronRight, FileText, FolderOpen, History, Plus, Terminal } from "lucide-react";
+import { useViewportBox } from "@/lib/viewport";
 import {
   Conversation,
   ConversationContent,
@@ -61,8 +62,8 @@ function ToolCard({ run }: { run: ToolRun }) {
   const status = !output ? "Berjalan…" : failed ? "Gagal" : "Selesai";
   return (
     <Link
-      to="/linimasa"
-      hash={run.id}
+      to={command ? "/linimasa" : "/files"}
+      hash={command ? run.id : String(run.input.path ?? "")}
       className="my-2 flex min-w-0 items-center gap-2.5 rounded-lg border border-border/60 bg-card/50 px-3 py-2 text-sm transition-colors hover:border-primary/50 hover:bg-card/80"
     >
       {command ? <Terminal className="size-4 shrink-0 text-primary" /> : <FileText className="size-4 shrink-0 text-primary" />}
@@ -162,11 +163,12 @@ function Chat() {
     inputRef.current?.focus();
   };
 
+  const box = useViewportBox();
   const last = messages.at(-1);
   const waiting = streaming && last?.role === "assistant" && !last.parts.some((part) => part.type === "text" && part.text.trim());
 
   return (
-    <main className="chat-shell flex h-dvh min-w-0 flex-col overflow-hidden bg-background text-foreground">
+    <main style={box} className="chat-shell fixed inset-x-0 top-0 flex h-dvh min-w-0 flex-col overflow-hidden bg-background text-foreground">
       <header className="z-20 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-border/50 bg-background/75 px-4 py-3 backdrop-blur-xl sm:px-6">
         <div className="flex min-w-0 items-center gap-2.5">
           <span className="grid size-8 shrink-0 place-items-center rounded-md border border-border/80 bg-card shadow-panel">
@@ -180,6 +182,9 @@ function Chat() {
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
+        <Button asChild variant="ghost" size="sm" className="text-muted-foreground" title="File Manager">
+          <Link to="/files"><FolderOpen className="size-4" /> <span className="hidden sm:inline">File</span></Link>
+        </Button>
         <Button asChild variant="ghost" size="sm" className="text-muted-foreground" title="Linimasa eksekusi">
           <Link to="/linimasa"><History className="size-4" /> <span className="hidden sm:inline">Linimasa</span></Link>
         </Button>
