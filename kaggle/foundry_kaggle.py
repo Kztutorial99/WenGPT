@@ -69,7 +69,9 @@ LOG_FILE = "/kaggle/working/ollama.log"
 
 MODEL_DIR = f"{CACHE}/ollama_models" if CACHE else "/kaggle/working/ollama_models"
 os.makedirs(MODEL_DIR, exist_ok=True)
-os.environ.update(OLLAMA_MODELS=MODEL_DIR, OLLAMA_NOPRUNE="1", OLLAMA_HOST="0.0.0.0:11434", OLLAMA_ORIGINS="*")
+os.environ.update(OLLAMA_MODELS=MODEL_DIR, OLLAMA_NOPRUNE="1", OLLAMA_HOST="0.0.0.0:11434", OLLAMA_ORIGINS="*",
+                  OLLAMA_KEEP_ALIVE="-1", OLLAMA_FLASH_ATTENTION="1", OLLAMA_KV_CACHE_TYPE="q8_0",
+                  OLLAMA_NUM_PARALLEL="1", OLLAMA_SCHED_SPREAD="1")
 
 def ollama_ok():
     try: return requests.get(f"{OLLAMA_URL}/api/tags", timeout=5).status_code == 200
@@ -102,7 +104,7 @@ if not ollama_has(MODEL):
         ACTIVE_MODEL = "rvn27b"
 print("Model:", ACTIVE_MODEL)
 print("Memanaskan model ke GPU...")
-requests.post(f"{OLLAMA_URL}/api/generate", json={"model": ACTIVE_MODEL, "prompt": "Hi", "stream": False, "keep_alive": "12h"}, timeout=900).raise_for_status()
+requests.post(f"{OLLAMA_URL}/api/generate", json={"model": ACTIVE_MODEL, "prompt": "Hi", "stream": False, "keep_alive": -1}, timeout=900).raise_for_status()
 
 # %% [code]
 # CELL 5 - TUNNEL + LAPOR URL (satu penjaga: hidupkan ulang tunnel/ollama & lapor tiap 60 detik)
