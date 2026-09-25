@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Check, ChevronLeft, ChevronRight, CircleAlert, Clock3, FileText, Files, GitBranch, Terminal } from "lucide-react";
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, CircleAlert, Clock3, FileText, FolderOpen as Files, GitBranch, Terminal } from "lucide-react";
 import { CopyButton } from "@/components/chat-code";
 import { Button } from "@/components/ui/button";
 import { loadCheckpoints, type Checkpoint, type ToolRun } from "@/lib/chat-store";

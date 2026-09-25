@@ -23,6 +23,12 @@ Aturan:
 - Jangan menumpuk judul, mengulang kesimpulan, atau memakai tanda baca berlebihan. Jangan mengarang hasil tool.
 - Untuk Bahasa Indonesia, gunakan ejaan dan tanda baca yang natural. Sesuaikan tingkat teknis dengan cara pengguna berbicara.
 - Jika pengguna minta dibuatkan file (script, dokumen, config, dll), SELALU buat dengan write_file (bukan echo/cat >), lalu sebutkan bahwa file bisa dilihat di File Manager.
+- Git: jika pengguna hanya bilang "cek git" / "git ada?", cukup jalankan \`git --version\`. Jangan jalankan git status/init/clone/push kecuali pengguna memintanya secara eksplisit.
+- Cek tool/bahasa (python, node, git, dll) = cek versi terinstal, bukan status proyek.
+- Menulis script: tulis kode lengkap dengan indentasi konsisten 4 spasi (tanpa tab), tanpa karakter non-ASCII pada kode/identifier, dan jangan tinggalkan placeholder.
+- Script Python: setelah write_file, jalankan dulu \`python3 -m py_compile <file>\` sebelum menjalankannya. Untuk script interaktif, uji dengan input lewat pipe dan pastikan menangani EOF (try/except EOFError).
+- Jika error, BACA pesan error baris per baris, perbaiki akar masalahnya dengan menulis ulang file utuh lewat write_file, lalu uji ulang. Jangan umumkan hasil ke pengguna sebelum uji terakhir berhasil.
+- File dari sesi lain milik pengguna otomatis tersedia di sandbox (File Manager dipakai bersama semua sesi).
 - Folder kerja: /home/user. Jangan jalankan perintah yang berjalan selamanya (server) tanpa '&' di belakang.`;
 
 // The "address book": the Kaggle notebook reports its current tunnel URL to a
@@ -115,9 +121,10 @@ export const Route = createFileRoute("/api/chat")({
         const apiKey = process.env["AI_API_KEY"];
         if (!apiKey) return chatError("Layanan AI belum siap. Silakan coba lagi sebentar.");
 
-        let body: { messages: UIMessage[]; sandboxId?: string | null };
+        type SharedFile = { path: string; content: string };
+        let body: { messages: UIMessage[]; sandboxId?: string | null; files?: SharedFile[] };
         try {
-          body = (await request.json()) as { messages: UIMessage[]; sandboxId?: string | null };
+          body = (await request.json()) as typeof body;
         } catch {
           return chatError("Pesan tidak dapat dibaca. Silakan kirim ulang.");
         }
@@ -145,6 +152,13 @@ export const Route = createFileRoute("/api/chat")({
             }
           }
           if (!sandbox) sandbox = await Sandbox.create({ apiKey: e2bKey, timeoutMs: 15 * 60_000 });
+          const shared = Array.isArray(body.files) ? body.files.slice(0, 40) : [];
+          await Promise.all(shared.map(async (f) => {
+            try {
+              if (typeof f?.path !== "string" || typeof f?.content !== "string" || f.content.length > 200_000) return;
+              if (!(await sandbox!.files.exists(f.path))) await sandbox!.files.write(f.path, f.content);
+            } catch { /* abaikan file yang gagal dipulihkan */ }
+          }));
           if (reset) emit({ t: "sandbox_reset" });
           emit({ t: "sandbox", id: sandbox.sandboxId });
           return sandbox;
@@ -188,7 +202,7 @@ export const Route = createFileRoute("/api/chat")({
           system: SYSTEM_PROMPT,
           messages: await convertToModelMessages(body.messages),
           tools,
-          stopWhen: stepCountIs(8),
+          stopWhen: stepCountIs(24),
           abortSignal: request.signal,
           providerOptions: { openai: { reasoningEffort: "none" as never } },
         });
@@ -200,6 +214,9 @@ export const Route = createFileRoute("/api/chat")({
             try {
               for await (const part of result.fullStream) {
                 if (part.type === "text-delta") emit({ t: "text", v: part.text });
+                else if (part.type === "tool-input-start") {
+                  emit({ t: "tool", id: part.id, name: part.toolName, input: {}, at: Date.now() });
+                }
                 else if (part.type === "tool-call") {
                   toolStartedAt.set(part.toolCallId, Date.now());
                   emit({ t: "tool", id: part.toolCallId, name: part.toolName, input: part.input, at: Date.now() });

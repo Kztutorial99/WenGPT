@@ -12,7 +12,7 @@ export type Part = { type: "text"; text: string } | { type: "tool"; run: ToolRun
 export type MessageData = { id: string; role: "user" | "assistant"; parts: Part[]; createdAt: number };
 export type ChatSession = { id: string; title: string; createdAt: number; updatedAt: number; sandboxId: string | null; messages: MessageData[] };
 export type Checkpoint = { id: string; ask: string; startedAt: number; runs: ToolRun[] };
-export type SavedFile = { path: string; content: string; runId: string; ask: string; failed: boolean; updatedAt: number };
+export type SavedFile = { path: string; content: string; runId: string; ask: string; failed: boolean; updatedAt: number; sessionId?: string; sessionTitle?: string };
 type State = { ready: boolean; sessions: ChatSession[]; activeId: string | null; streamingIds: string[] };
 
 const STORE = "wengpt:sessions:v2";
@@ -117,7 +117,7 @@ export async function sendMessage(sessionId: string, raw: string) {
   try {
     const response = await fetch("/api/chat", {
       method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.signal,
-      body: JSON.stringify({ sessionId, sandboxId: session.sandboxId, messages: history.slice(-16).map((message) => ({ id: message.id, role: message.role, parts: [{ type: "text", text: messageText(message) }] })) }),
+      body: JSON.stringify({ sessionId, sandboxId: session.sandboxId, files: loadAllFiles().filter((file) => !file.failed && file.sessionId !== sessionId).slice(0, 40).map(({ path, content }) => ({ path, content })), messages: history.slice(-16).map((message) => ({ id: message.id, role: message.role, parts: [{ type: "text", text: messageText(message) }] })) }),
     });
     if (!response.ok || !response.body) throw new Error((await response.text()) || "WenGPT tidak merespons.");
     const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = "";
@@ -139,7 +139,10 @@ export async function sendMessage(sessionId: string, raw: string) {
         } else if (event.t === "sandbox_reset") {
           patchAssistant(sessionId, assistant.id, (parts) => [...parts, { type: "text", text: "\n\n> Sandbox sesi sebelumnya sudah berakhir. Saya membuat lingkungan baru; paket sementara perlu dipasang ulang.\n\n" }]);
         } else if (event.t === "tool") {
-          patchAssistant(sessionId, assistant.id, (parts) => [...parts, { type: "tool", run: { id: String(event['id']), name: String(event['name']), input: (event['input'] ?? {}) as ToolRun["input"], startedAt: Number(event['at']) || Date.now() } }]);
+          const id = String(event['id']); const input = (event['input'] ?? {}) as ToolRun["input"];
+          patchAssistant(sessionId, assistant.id, (parts) => parts.some((part) => part.type === "tool" && part.run.id === id)
+            ? parts.map((part) => part.type === "tool" && part.run.id === id ? { type: "tool", run: { ...part.run, input, startedAt: Number(event['at']) || part.run.startedAt } } : part)
+            : [...parts, { type: "tool", run: { id, name: String(event['name']), input, startedAt: Number(event['at']) || Date.now() } }]);
         } else if (event.t === "result") {
           patchAssistant(sessionId, assistant.id, (parts) => parts.map((part) => part.type === "tool" && part.run.id === event['id'] ? { type: "tool", run: { ...part.run, output: event['output'] as ToolOut, finishedAt: Number(event['at']) || Date.now(), ...(Number(event['durationMs']) ? { durationMs: Number(event['durationMs']) } : {}) } } : part));
         }
@@ -170,4 +173,12 @@ export function loadFiles(sessionId: string): SavedFile[] {
     map.set(path, { path, content: String(run.input.content ?? ""), runId: run.id, ask: checkpoint.ask, failed: run.output?.ok === false, updatedAt: run.finishedAt ?? run.startedAt });
   }
   return [...map.values()].reverse();
+}
+export function loadAllFiles(): SavedFile[] {
+  const map = new Map<string, SavedFile>();
+  for (const session of state.sessions) for (const file of loadFiles(session.id)) {
+    const prev = map.get(file.path);
+    if (!prev || prev.updatedAt < file.updatedAt) map.set(file.path, { ...file, sessionId: session.id, sessionTitle: session.title });
+  }
+  return [...map.values()].sort((a, b) => b.updatedAt - a.updatedAt);
 }
