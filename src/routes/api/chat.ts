@@ -92,18 +92,36 @@ type Ev =
   | { t: "text"; v: string }
   | { t: "sandbox"; id: string }
   | { t: "sandbox_reset" }
-  | { t: "tool"; id: string; name: string; input: unknown }
-  | { t: "result"; id: string; output: unknown }
+  | { t: "tool"; id: string; name: string; input: unknown; at: number }
+  | { t: "result"; id: string; output: unknown; at: number; durationMs: number }
   | { t: "error"; v: string };
+
+const streamHeaders = {
+  "Content-Type": "application/x-ndjson; charset=utf-8",
+  "Cache-Control": "no-store",
+};
+
+function chatError(message: string) {
+  return new Response(`${JSON.stringify({ t: "error", v: message } satisfies Ev)}\n`, {
+    status: 200,
+    headers: streamHeaders,
+  });
+}
 
 export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
       POST: async ({ request }) => {
         const apiKey = process.env["AI_API_KEY"];
-        if (!apiKey) return new Response("AI_API_KEY belum diatur.", { status: 500 });
+        if (!apiKey) return chatError("Layanan AI belum siap. Silakan coba lagi sebentar.");
 
-        const body = (await request.json()) as { messages: UIMessage[]; sandboxId?: string | null };
+        let body: { messages: UIMessage[]; sandboxId?: string | null };
+        try {
+          body = (await request.json()) as { messages: UIMessage[]; sandboxId?: string | null };
+        } catch {
+          return chatError("Pesan tidak dapat dibaca. Silakan kirim ulang.");
+        }
+        if (!Array.isArray(body.messages)) return chatError("Riwayat percakapan tidak valid. Silakan buat sesi baru.");
         const baseURL = await resolveAiBaseUrl();
         const provider = createOpenAI({ apiKey, baseURL });
         const model = process.env["AI_MODEL"] || "gpt-4o-mini";
@@ -184,11 +202,11 @@ export const Route = createFileRoute("/api/chat")({
                 if (part.type === "text-delta") emit({ t: "text", v: part.text });
                 else if (part.type === "tool-call") {
                   toolStartedAt.set(part.toolCallId, Date.now());
-                  emit({ t: "tool", id: part.toolCallId, name: part.toolName, input: part.input, at: Date.now() } as Ev);
+                  emit({ t: "tool", id: part.toolCallId, name: part.toolName, input: part.input, at: Date.now() });
                 } else if (part.type === "tool-result") {
                   const at = Date.now();
                   const startedAt = toolStartedAt.get(part.toolCallId) ?? at;
-                  emit({ t: "result", id: part.toolCallId, output: part.output, at, durationMs: at - startedAt } as Ev);
+                  emit({ t: "result", id: part.toolCallId, output: part.output, at, durationMs: at - startedAt });
                 }
                 else if (part.type === "error") {
                   const reason = part.error instanceof Error ? part.error.message : String(part.error);
@@ -206,7 +224,7 @@ export const Route = createFileRoute("/api/chat")({
           },
         });
 
-        return new Response(stream, { headers: { "Content-Type": "application/x-ndjson; charset=utf-8" } });
+        return new Response(stream, { headers: streamHeaders });
       },
     },
   },
