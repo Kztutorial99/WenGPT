@@ -2,7 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { createOpenAI } from "@ai-sdk/openai";
 import { streamText, convertToModelMessages, type UIMessage } from "ai";
 
-const SYSTEM_PROMPT = `You are Foundry, an AI web app builder.
+const SYSTEM_PROMPT = `/no_think
+You are Foundry, an AI web app builder.
 
 The user describes an app. You reply with:
 1. One or two short sentences describing what you built (plain language).
@@ -40,7 +41,19 @@ async function isAlive(v1Base: string): Promise<boolean> {
   }
 }
 
+// Cache the resolved URL for a short time so each message doesn't wait on
+// registry + health checks before the model even starts.
+let cachedUrl: { url: string; at: number } | null = null;
+const CACHE_MS = 60_000;
+
 async function resolveAiBaseUrl(): Promise<string> {
+  if (cachedUrl && Date.now() - cachedUrl.at < CACHE_MS) return cachedUrl.url;
+  const url = await resolveAiBaseUrlUncached();
+  cachedUrl = { url, at: Date.now() };
+  return url;
+}
+
+async function resolveAiBaseUrlUncached(): Promise<string> {
   const fallback = withV1(process.env["AI_BASE_URL"] || "https://api.openai.com/v1");
   const regUrl = process.env["AI_REGISTRY_URL"];
   const regToken = process.env["AI_REGISTRY_TOKEN"];
@@ -93,6 +106,8 @@ export const Route = createFileRoute("/api/chat")({
           system: SYSTEM_PROMPT,
           messages: await convertToModelMessages(messages),
           abortSignal: request.signal,
+          // Ollama: turn off Qwen3 "thinking" (long hidden reasoning before any text)
+          providerOptions: { openai: { reasoningEffort: "none" as never } },
         });
 
         // Stream via fullStream so a provider failure surfaces as an explicit
@@ -112,6 +127,7 @@ export const Route = createFileRoute("/api/chat")({
                       `\n\n**Could not reach your AI server.** ${reason}\n\nCheck that the model server is running and the tunnel address is alive.`,
                     ),
                   );
+                  cachedUrl = null; // force re-resolve next time
                   break;
                 }
               }
