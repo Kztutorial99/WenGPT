@@ -1,6 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Bot, FileText, Plus, Terminal } from "lucide-react";
+import { Bot, ChevronRight, FileText, History, Plus, Terminal } from "lucide-react";
 import {
   Conversation,
   ConversationContent,
@@ -14,7 +14,6 @@ import {
   PromptInputTextarea,
 } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
-import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from "@/components/ai-elements/tool";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/")({
@@ -59,31 +58,18 @@ function ToolCard({ run }: { run: ToolRun }) {
   const failed = !!output && ((typeof output.exitCode === "number" && output.exitCode !== 0) || output.ok === false);
   const command = run.name === "run_command";
   const label = command ? String(run.input.command ?? "Perintah terminal") : `Tulis ${String(run.input.path ?? "file")}`;
-  const state = !output ? "input-available" : failed ? "output-error" : "output-available";
-  const result = output
-    ? command
-      ? `${String(output.stdout ?? "")}${output.stderr ? `\n${String(output.stderr)}` : ""}\n[exit ${String(output.exitCode)}]`
-      : JSON.stringify(output, null, 2)
-    : undefined;
-
+  const status = !output ? "Berjalan…" : failed ? "Gagal" : "Selesai";
   return (
-    <Tool defaultOpen={false} className="my-3 min-w-0 overflow-hidden border-border/70 bg-card/55 backdrop-blur-xl">
-      <ToolHeader
-        type="dynamic-tool"
-        toolName={run.name}
-        state={state}
-        title={label}
-        className="min-w-0 [&>div]:min-w-0 [&>div>span:first-of-type]:max-w-52 [&>div>span:first-of-type]:truncate sm:[&>div>span:first-of-type]:max-w-md"
-      />
-      <ToolContent className="min-w-0 border-t border-border/60 pt-3">
-        <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
-          {command ? <Terminal className="size-3.5" /> : <FileText className="size-3.5" />}
-          {command ? "Terminal" : "File"}
-        </div>
-        <ToolInput input={run.input} />
-        <ToolOutput output={result} errorText={failed ? output?.stderr || output?.error || "Perintah gagal." : undefined} />
-      </ToolContent>
-    </Tool>
+    <Link
+      to="/linimasa"
+      hash={run.id}
+      className="my-2 flex min-w-0 items-center gap-2.5 rounded-lg border border-border/60 bg-card/50 px-3 py-2 text-sm transition-colors hover:border-primary/50 hover:bg-card/80"
+    >
+      {command ? <Terminal className="size-4 shrink-0 text-primary" /> : <FileText className="size-4 shrink-0 text-primary" />}
+      <span className="min-w-0 flex-1 truncate font-mono text-[12.5px]">{label}</span>
+      <span className={`shrink-0 text-[11px] ${failed ? "text-destructive" : output ? "text-success" : "text-muted-foreground"}`}>{status}</span>
+      <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+    </Link>
   );
 }
 
@@ -106,8 +92,8 @@ function Chat() {
   }, []);
 
   useEffect(() => {
-    if (!streaming) localStorage.setItem(STORE, JSON.stringify({ messages, sandboxId }));
-  }, [messages, sandboxId, streaming]);
+    localStorage.setItem(STORE, JSON.stringify({ messages, sandboxId }));
+  }, [messages, sandboxId]);
 
   const send = useCallback(async (text: string) => {
     const prompt = text.trim();
@@ -193,9 +179,14 @@ function Chat() {
             </p>
           </div>
         </div>
+        <div className="flex shrink-0 items-center gap-1">
+        <Button asChild variant="ghost" size="sm" className="text-muted-foreground" title="Linimasa eksekusi">
+          <Link to="/linimasa"><History className="size-4" /> <span className="hidden sm:inline">Linimasa</span></Link>
+        </Button>
         <Button type="button" variant="ghost" size="sm" onClick={reset} className="shrink-0 text-muted-foreground" title="Mulai chat baru">
           <Plus className="size-4" /> <span className="hidden sm:inline">Chat baru</span>
         </Button>
+        </div>
       </header>
 
       <Conversation className="min-h-0 min-w-0">

@@ -1,5 +1,6 @@
 "use client";
 
+import { CodeBox } from "@/components/chat-code";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup, ButtonGroupText } from "@/components/ui/button-group";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -277,6 +278,9 @@ export const MessageResponse = memo(
     <Streamdown
       className={cn("size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0", className)}
       plugins={streamdownPlugins}
+      controls={{ code: false, table: false, mermaid: false }}
+      lineNumbers={false}
+      components={{ pre: CodeBox }}
       {...props}
     />
   ),

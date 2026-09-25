@@ -22,3 +22,7 @@
 - [x] Benahi auto-scroll dan tombol kembali ke bawah
 - [x] Rapikan composer dan tampilan Markdown
 - [x] Uji mobile/desktop, push, dan verifikasi deployment
+
+## Kotak kode & Linimasa
+- [x] Kotak kode ringkas, hapus ikon unduh, tombol salin berfungsi
+- [x] Eksekusi Shell dipindah ke halaman Linimasa
