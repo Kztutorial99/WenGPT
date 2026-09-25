@@ -54,6 +54,7 @@ function Builder() {
   const [tab, setTab] = useState<"preview" | "code">("preview");
   const [mobileView, setMobileView] = useState<"chat" | "app">("chat");
   const [previewKey, setPreviewKey] = useState(0);
+  const [waitSeconds, setWaitSeconds] = useState(0);
 
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -66,6 +67,20 @@ function Builder() {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, streaming]);
+
+  useEffect(() => {
+    if (!streaming) {
+      setWaitSeconds(0);
+      return;
+    }
+
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => {
+      setWaitSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [streaming]);
 
   const send = useCallback(
     async (text: string) => {
@@ -115,6 +130,8 @@ function Builder() {
           setMessages((prev) =>
             prev.map((m) => (m.id === assistantId ? { ...m, content: snapshot } : m)),
           );
+          const partialBuild = extractCode(snapshot);
+          if (partialBuild) setCode(partialBuild);
         }
 
         const built = extractCode(full);
@@ -198,7 +215,14 @@ function Builder() {
                 </div>
               </div>
             ) : (
-              messages.map((m) => <Bubble key={m.id} message={m} streaming={streaming} />)
+              messages.map((m, index) => (
+                <Bubble
+                  key={m.id}
+                  message={m}
+                  streaming={streaming && index === messages.length - 1}
+                  waitSeconds={waitSeconds}
+                />
+              ))
             )}
 
             {error && (
@@ -295,7 +319,11 @@ function Builder() {
                     <MonitorPlay className="mx-auto size-5 text-muted-foreground" />
                   )}
                   <p className="text-sm text-muted-foreground">
-                    {streaming ? "Writing your app…" : "Your running app will appear here."}
+                    {streaming
+                      ? waitSeconds < 20
+                        ? "Connecting to the AI server…"
+                        : `The Kaggle model is working… ${waitSeconds}s`
+                      : "Your running app will appear here."}
                   </p>
                 </div>
               </div>
@@ -319,7 +347,15 @@ function Builder() {
   );
 }
 
-function Bubble({ message, streaming }: { message: Message; streaming: boolean }) {
+function Bubble({
+  message,
+  streaming,
+  waitSeconds,
+}: {
+  message: Message;
+  streaming: boolean;
+  waitSeconds: number;
+}) {
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
@@ -340,10 +376,16 @@ function Bubble({ message, streaming }: { message: Message; streaming: boolean }
           <ReactMarkdown>{text}</ReactMarkdown>
         </div>
       ) : (
-        streaming && (
-          <p className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="size-3.5 animate-spin" /> Thinking…
-          </p>
+        streaming && !message.content && (
+          <div className="space-y-1.5 text-sm text-muted-foreground">
+            <p className="flex items-center gap-2">
+              <Loader2 className="size-3.5 animate-spin" />
+              {waitSeconds < 20 ? "Connecting to the AI server…" : "The Kaggle model is working…"}
+            </p>
+            {waitSeconds >= 20 && (
+              <p className="pl-5 font-mono text-[11px]">{waitSeconds}s elapsed · first response can take 2–3 minutes</p>
+            )}
+          </div>
         )
       )}
       {hasCode && (
