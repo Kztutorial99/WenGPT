@@ -94,6 +94,8 @@ function ToolCard({ run, sessionId }: { run: ToolRun; sessionId: string }) {
           ) : (
             <Shimmer className="text-[11px]">{command ? "Menjalankan…" : "Menulis file…"}</Shimmer>
           )
+        ) : (run.output as { cancelled?: boolean }).cancelled ? (
+          "Dibatalkan"
         ) : failed ? (
           "Gagal"
         ) : (
@@ -188,7 +190,7 @@ function Chat() {
       setUploadError(error instanceof Error ? error.message : "File gagal dilampirkan."),
     );
   };
-  const waiting = streaming && last?.role === "assistant" && last.parts.length === 0;
+  const waiting = streaming && last?.role === "assistant";
   const runningTool =
     streaming &&
     last?.role === "assistant" &&
@@ -286,6 +288,14 @@ function Chat() {
                         </summary>
                         <p>{part.text.trim()}</p>
                       </details>
+                    ) : part.type === "cancelled" ? (
+                      <div
+                        key={`${message.id}-${index}`}
+                        className="mt-1 inline-flex w-fit items-center gap-1.5 rounded-full border border-destructive/40 bg-destructive/10 px-2.5 py-1 text-[11px] font-medium text-destructive"
+                      >
+                        <X className="size-3" />
+                        Pesan dibatalkan
+                      </div>
                     ) : (
                       <ToolCard key={part.run.id} run={part.run} sessionId={sessionId} />
                     ),

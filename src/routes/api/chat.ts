@@ -432,14 +432,33 @@ export const Route = createFileRoute("/api/chat")({
           }),
         };
 
+        // Mode berpikir adaptif: hanya aktif untuk permintaan yang memang butuh penalaran.
+        const lastUser = [...body.messages].reverse().find((m) => m.role === "user");
+        const lastText = String(
+          (lastUser?.parts as { type: string; text?: string }[] | undefined)?.find((p) => p.type === "text")?.text ?? "",
+        );
+        const needsThink =
+          lastText.length > 160 ||
+          /\b(kenapa|mengapa|jelaskan|analisis|analisa|bandingkan|hitung|debug|error|fix|perbaiki|buat(kan)?|script|kode|code|algoritma|rencana|strategi|optimasi|install|jalankan|why|explain|solve|build|plan)\b/i.test(
+            lastText,
+          );
+        const modelMessages = await convertToModelMessages(body.messages);
+        if (!needsThink) {
+          const last = modelMessages.at(-1);
+          if (last?.role === "user") {
+            if (typeof last.content === "string") last.content += " /no_think";
+            else last.content.push({ type: "text", text: "/no_think" });
+          }
+        }
+
         const result = streamText({
           model: provider.chat(model),
           system: SYSTEM_PROMPT,
-          messages: await convertToModelMessages(body.messages),
+          messages: modelMessages,
           tools,
           stopWhen: stepCountIs(24),
           abortSignal: request.signal,
-          providerOptions: { openai: { reasoningEffort: "low" as never } },
+          providerOptions: { openai: { reasoningEffort: (needsThink ? "medium" : "low") as never } },
         });
 
         const toolStartedAt = new Map<string, number>();

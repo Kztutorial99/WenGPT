@@ -34,7 +34,8 @@ export type ToolRun = {
 export type Part =
   | { type: "text"; text: string }
   | { type: "think"; text: string }
-  | { type: "tool"; run: ToolRun };
+  | { type: "tool"; run: ToolRun }
+  | { type: "cancelled" };
 export type MessageData = {
   id: string;
   role: "user" | "assistant";
@@ -270,7 +271,29 @@ export function deleteSession(id: string) {
   return activeId;
 }
 export function stopSession(id: string) {
-  controllers.get(id)?.abort();
+  const controller = controllers.get(id);
+  if (!controller) return;
+  controller.abort();
+  controllers.delete(id);
+  // Hentikan langsung di UI: tandai tool yang belum selesai dan tambahkan penanda batal.
+  const session = state.sessions.find((s) => s.id === id);
+  const last = session?.messages.at(-1);
+  if (last?.role === "assistant") {
+    patchAssistant(id, last.id, (parts) => [
+      ...parts.map((part) =>
+        part.type === "tool" && !part.run.output
+          ? {
+              ...part,
+              run: { ...part.run, output: { ok: false, cancelled: true } as unknown as ToolOut, finishedAt: Date.now() },
+            }
+          : part,
+      ),
+      { type: "cancelled" } as Part,
+    ]);
+  }
+  state = { ...state, streamingIds: state.streamingIds.filter((value) => value !== id) };
+  save();
+  emit();
 }
 export function isStreaming(id: string) {
   return state.streamingIds.includes(id);
@@ -298,7 +321,7 @@ function summarizeTool(part: Extract<Part, { type: "tool" }>) {
 function messageText(message: MessageData) {
   return message.parts
     .map((part) =>
-      part.type === "text" ? part.text : part.type === "think" ? "" : `\n${summarizeTool(part)}\n`,
+      part.type === "text" ? part.text : part.type === "think" || part.type === "cancelled" ? "" : `\n${summarizeTool(part)}\n`,
     )
     .join("");
 }
@@ -475,6 +498,7 @@ export async function sendMessage(
       const lines = buffer.split("\n");
       buffer = lines.pop() ?? "";
       for (const line of lines) {
+        if (controller.signal.aborted) break;
         if (!line.trim()) continue;
         const event = JSON.parse(line) as { t: string; [key: string]: unknown };
         if (event.t === "text" || event.t === "error") {
@@ -559,16 +583,18 @@ export async function sendMessage(
       }
     }
   } catch (error) {
-    if ((error as Error).name !== "AbortError")
+    if (!controller.signal.aborted && (error as Error).name !== "AbortError")
       patchAssistant(sessionId, assistant.id, (parts) => [
         ...parts,
         { type: "text", text: `\n\n**${(error as Error).message}**` },
       ]);
   } finally {
-    controllers.delete(sessionId);
-    state = { ...state, streamingIds: state.streamingIds.filter((id) => id !== sessionId) };
-    save();
-    emit();
+    if (controllers.get(sessionId) === controller) controllers.delete(sessionId);
+    if (!controller.signal.aborted) {
+      state = { ...state, streamingIds: state.streamingIds.filter((id) => id !== sessionId) };
+      save();
+      emit();
+    }
   }
 }
 
