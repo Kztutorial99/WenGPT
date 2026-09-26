@@ -227,6 +227,24 @@ const hit = (title: string, url: string, snippet: string): WebHit | null => {
   try { site = new URL(url).hostname.replace(/^www\./, ""); } catch { return null; }
   return { title: decodeHtml(title).slice(0, 160), url, snippet: decodeHtml(snippet).slice(0, 320), site };
 };
+// Cadangan berita: Google News RSS (buka lewat server, formatnya stabil).
+async function searchGoogleNews(query: string, max: number) {
+  const res = await fetch(
+    `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=id&gl=ID&ceid=ID:id`,
+    { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(8_000) },
+  );
+  const xml = await res.text();
+  const out: WebHit[] = [];
+  for (const item of xml.match(/<item>[\s\S]*?<\/item>/g) ?? []) {
+    const g = (tag: string) => decodeHtml(item.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`))?.[1] ?? "");
+    const url = g("link").replace(/&amp;/g, "&");
+    const source = item.match(/<source[^>]*>([\s\S]*?)<\/source>/)?.[1] ?? "";
+    const h = hit(g("title"), url, `${source ? `${source} · ` : ""}${g("pubDate")}`);
+    if (h) out.push(h);
+    if (out.length >= max) break;
+  }
+  return out;
+}
 async function searchBing(query: string, max: number) {
   const res = await fetch(`https://www.bing.com/search?format=rss&setlang=id&cc=ID&q=${encodeURIComponent(query)}`, {
     headers: { "User-Agent": UA, "Accept-Language": "id,en;q=0.8" },
