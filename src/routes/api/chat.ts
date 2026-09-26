@@ -242,41 +242,28 @@ async function searchBing(query: string, max: number) {
   }
   return out;
 }
-async function searchDdgHtml(query: string, max: number) {
-  const res = await fetch("https://html.duckduckgo.com/html/", {
+async function searchTavily(query: string, max: number) {
+  const apiKey = process.env["TAVILY_API_KEY"];
+  if (!apiKey) return [] as WebHit[];
+  const res = await fetch("https://api.tavily.com/search", {
     method: "POST",
-    headers: { "User-Agent": UA, "Content-Type": "application/x-www-form-urlencoded" },
-    body: `q=${encodeURIComponent(query)}&kl=id-id`,
-    signal: AbortSignal.timeout(8_000),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      api_key: apiKey,
+      query,
+      max_results: max,
+      search_depth: "basic",
+      include_answer: false,
+    }),
+    signal: AbortSignal.timeout(10_000),
   });
-  const html = await res.text();
+  if (!res.ok) throw new Error(`tavily ${res.status}`);
+  const data = (await res.json()) as { results?: { title?: string; url?: string; content?: string }[] };
   const out: WebHit[] = [];
-  const re = /class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(html)) && out.length < max) {
-    let url = (m[1] ?? "").replace(/&amp;/g, "&");
-    const u = url.match(/[?&]uddg=([^&]+)/);
-    if (u) url = decodeURIComponent(u[1] ?? "");
-    const h = hit(m[2] ?? "", url, m[3] ?? "");
+  for (const r of data.results ?? []) {
+    const h = hit(r.title ?? "", r.url ?? "", r.content ?? "");
     if (h) out.push(h);
-  }
-  return out;
-}
-async function searchDdgLite(query: string, max: number) {
-  const res = await fetch(`https://lite.duckduckgo.com/lite/?kl=id-id&q=${encodeURIComponent(query)}`, {
-    headers: { "User-Agent": UA, "Accept-Language": "id,en;q=0.8" },
-    signal: AbortSignal.timeout(8_000),
-  });
-  const html = await res.text();
-  const out: WebHit[] = [];
-  const re = /<a[^>]+href="([^"]+)"[^>]*class='result-link'[^>]*>([\s\S]*?)<\/a>[\s\S]*?class='result-snippet'[^>]*>([\s\S]*?)<\/td>/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(html)) && out.length < max) {
-    let url = (m[1] ?? "").replace(/&amp;/g, "&");
-    const u = url.match(/[?&]uddg=([^&]+)/);
-    if (u) url = decodeURIComponent(u[1] ?? "");
-    const h = hit(m[2] ?? "", url, m[3] ?? "");
-    if (h) out.push(h);
+    if (out.length >= max) break;
   }
   return out;
 }
@@ -285,8 +272,8 @@ async function webSearch(query: string, max = 6) {
   const key = query.trim().toLowerCase();
   const cached = searchCache.get(key);
   if (cached && Date.now() - cached.at < 10 * 60_000) return cached.results;
-  // Jalankan semua sumber paralel, pakai hasil pertama yang tidak kosong.
-  const engines = [searchBing, searchDdgHtml, searchDdgLite].map((fn) =>
+  // Utama: Tavily (API resmi, stabil dari server). Cadangan: Bing RSS.
+  const engines = [searchTavily, searchBing].map((fn) =>
     fn(query, max).then((r) => (r.length ? r : Promise.reject(new Error("kosong")))),
   );
   const results = await Promise.any(engines).catch(() => [] as WebHit[]);
