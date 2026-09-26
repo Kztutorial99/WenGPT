@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Sandbox } from "e2b";
 import { z } from "zod";
-import { connectSandbox, dropSandbox } from "@/lib/sandbox-pool.server";
+import { connectSandbox, dropSandbox, rememberSandbox } from "@/lib/sandbox-pool.server";
 
 const bodySchema = z.discriminatedUnion("action", [
   z.object({
@@ -73,7 +73,7 @@ export const Route = createFileRoute("/api/terminal")({
               let fresh = false;
               if (body.sandboxId) {
                 try {
-                  sb = await Sandbox.connect(body.sandboxId, opts(apiKey));
+                  sb = await connectSandbox(body.sandboxId, apiKey);
                 } catch {
                   sb = null;
                 }
@@ -82,6 +82,7 @@ export const Route = createFileRoute("/api/terminal")({
                 sb = await Sandbox.create(opts(apiKey));
                 fresh = true;
               }
+              rememberSandbox(sb);
               send({ t: "sandbox", id: sb.sandboxId, fresh });
               let handle = null;
               if (body.pid && !fresh) {

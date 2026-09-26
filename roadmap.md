@@ -31,3 +31,4 @@
 - [x] Form multi-token ringkas di atas input; AI menunggu Terapkan lalu melaporkan status
 - [x] Perbaiki form muncul dua kali dan teks "(Perintah — exit ?)"
 - [x] Kirim pembaruan ke GitHub
+- [x] Saring teks bocor AI, info pemilik token, terminal tidak reset & izin folder; push

@@ -3,7 +3,7 @@ import { Sandbox } from "e2b";
 // Simpan koneksi sandbox per isolate supaya input terminal tidak
 // membuka koneksi baru di setiap ketikan (penyebab utama lag).
 const pool = new Map<string, { sb: Sandbox; at: number }>();
-const TTL = 5 * 60_000;
+const TTL = 14 * 60_000;
 
 export async function connectSandbox(id: string, apiKey: string) {
   const hit = pool.get(id);
@@ -18,4 +18,8 @@ export async function connectSandbox(id: string, apiKey: string) {
 
 export function dropSandbox(id: string) {
   pool.delete(id);
+}
+
+export function rememberSandbox(sb: Sandbox) {
+  pool.set(sb.sandboxId, { sb, at: Date.now() });
 }

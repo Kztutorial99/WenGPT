@@ -895,3 +895,29 @@ export function syncSandboxFiles(sessionId: string) {
   syncing.set(sandboxId, job);
   return job;
 }
+
+/** Hasil form secret masuk ke respons AI yang sama (tanpa mengirim pesan baru). */
+export function applySecretResults(
+  sessionId: string,
+  runIds: string[],
+  results: { name: string; status: string; account?: string | undefined; detail?: string | undefined }[],
+) {
+  const lines = results.map((r) =>
+    r.status === "active"
+      ? `- **${r.name}** aktif${r.account ? ` · terhubung ke **${r.account}**` : ""} · tersimpan aman`
+      : `- **${r.name}** ${r.detail ?? "belum aktif"}`,
+  );
+  const allOk = results.every((r) => r.status === "active");
+  const text = `\n\n${allOk ? "Token sudah dicek dan disimpan:" : "Hasil pengecekan token:"}\n${lines.join("\n")}`;
+  updateSessions((sessions) =>
+    sessions.map((s) => {
+      if (s.id !== sessionId) return s;
+      const idx = s.messages.findIndex((m) => m.parts.some((p) => p.type === "tool" && runIds.includes(p.run.id)));
+      if (idx < 0) return s;
+      const messages = s.messages.map((m, i) =>
+        i === idx ? { ...m, parts: [...m.parts, { type: "text" as const, text }] } : m,
+      );
+      return { ...s, messages, updatedAt: Date.now() };
+    }),
+  );
+}

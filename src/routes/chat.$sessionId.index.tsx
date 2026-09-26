@@ -31,6 +31,7 @@ import {
   stopSession,
   type ToolRun,
 } from "@/lib/chat-store";
+import { applySecretResults } from "@/lib/chat-store";
 import { useChatStore } from "@/lib/use-chat-store";
 import { useViewportBox } from "@/lib/viewport";
 
@@ -309,10 +310,7 @@ function Chat() {
             onClose={() => dismissSecrets(secretRuns.map((r) => r.id))}
             onDone={(results) => {
               dismissSecrets(secretRuns.map((r) => r.id));
-              const lines = results
-                .map((r) => `- ${r.name}: ${r.status === "active" ? `aktif${r.account ? ` (${r.account})` : ""}` : r.detail ?? r.status}`)
-                .join("\n");
-              submit(`[Secret diterapkan]\n${lines}`);
+              applySecretResults(sessionId, secretRuns.map((r) => r.id), results);
             }}
           />
         )}

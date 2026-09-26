@@ -117,6 +117,8 @@ function TerminalPage() {
         while (queue.length) {
           const data = queue.splice(0).join("");
           await post({ action: "input", sandboxId, pid, data }).catch(() => {});
+          // beri jeda sangat singkat agar ketikan cepat tergabung dalam satu kiriman
+          if (!queue.length) await new Promise((r) => setTimeout(r, 8));
         }
         flushing = false;
       };
