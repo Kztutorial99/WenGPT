@@ -1,0 +1,28 @@
+name: Kaggle diag
+on: workflow_dispatch
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        account: ["1", "2", "3"]
+    steps:
+      - env:
+          KAGGLE_USERNAME: ${{ secrets[format('KAGGLE_USERNAME_{0}', matrix.account)] }}
+          KAGGLE_KEY: ${{ secrets[format('KAGGLE_KEY_{0}', matrix.account)] }}
+          UPSTASH_URL: ${{ secrets.UPSTASH_URL }}
+          UPSTASH_TOKEN: ${{ secrets.UPSTASH_TOKEN }}
+        run: |
+          pip install -q kaggle
+          curl -s -H "Authorization: Bearer $UPSTASH_TOKEN" "$UPSTASH_URL/keys/foundry*"; echo
+          kaggle kernels status "$KAGGLE_USERNAME/foundry-ai-server" || true
+          mkdir o; kaggle kernels output "$KAGGLE_USERNAME/foundry-ai-server" -p o || true
+          ls -la o; for f in o/*.log o/*.txt; do echo "== $f"; tail -c 3000 "$f"; done
+          python3 - <<'P'
+          import glob,json
+          for f in glob.glob('o/*.log')+glob.glob('o/*'):
+              try:
+                  d=json.load(open(f)); print("== JSON",f); print("".join(x.get('data','') for x in d)[-4000:])
+              except Exception: pass
+          P
