@@ -195,6 +195,9 @@ function Chat() {
     streaming &&
     last?.role === "assistant" &&
     last.parts.some((part) => part.type === "tool" && !part.run.output);
+  // Titik "…" disembunyikan saat AI sedang mengetik jawaban.
+  const lastPart = last?.role === "assistant" ? last.parts.at(-1) : undefined;
+  const typing = lastPart?.type === "text" && lastPart.text.trim().length > 0;
   return (
     <main
       style={box}
@@ -304,10 +307,10 @@ function Chat() {
               </Message>
             ))
           )}
-          {(runningTool || waiting) && (
+          {(runningTool || (waiting && !typing) || (streaming && last?.role === "user")) && (
             <div className="flex items-center gap-2.5 text-sm" role="status">
               {runningTool ? (
-                <Shimmer className="text-sm">Sedang mengerjakan…</Shimmer>
+                <Shimmer className="text-sm">Sedang Memproses…</Shimmer>
               ) : (
                 <AiDots />
               )}
