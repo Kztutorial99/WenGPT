@@ -91,15 +91,24 @@ export const Route = createFileRoute("/api/terminal")({
                   handle = null;
                 }
               }
-              if (!handle)
+              if (!handle) {
+                // Pastikan folder kerja milik user supaya mkdir/touch tidak "Permission denied".
+                await sb.commands
+                  .run(
+                    "mkdir -p /home/user && chown user:user /home/user && find /home/user -xdev ! -user user -exec chown -h user:user {} + 2>/dev/null; true",
+                    { user: "root", timeoutMs: 20_000 },
+                  )
+                  .catch(() => {});
                 handle = await sb.pty.create({
                   cols: body.cols,
                   rows: body.rows,
                   onData,
                   timeoutMs: 0,
                   cwd: "/home/user",
-                  envs: { TERM: "xterm-256color" },
+                  user: "user",
+                  envs: { TERM: "xterm-256color", HOME: "/home/user" },
                 });
+              }
               send({ t: "pid", pid: handle.pid });
               request.signal.addEventListener("abort", () => {
                 closed = true;

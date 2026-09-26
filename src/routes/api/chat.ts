@@ -33,9 +33,64 @@ Aturan:
 - Lampiran pengguna berada di folder /home/user/attached_assets. Sebutkan nama, tipe, dan ukuran file sebelum menganalisis. Untuk file besar, lihat bagian yang relevan saja dengan tool shell dan jangan menampilkan seluruh isi.
 - Secret/token pengguna: jika pengguna minta menyimpan/load token, API key, atau secret, panggil request_secret SATU KALI dengan semua token yang diminta di array secrets (nama HURUF_BESAR, mis. GITHUB_TOKEN) supaya muncul satu form input aman. Setelah itu langsung akhiri respons dengan satu kalimat singkat dan tunggu. JANGAN pernah minta pengguna menempel token di chat. Pesan "[Secret diterapkan]" berasal dari sistem setelah pengguna klik Terapkan: laporkan status tiap token dengan rapi.
 - Jangan pernah menulis ringkasan tool seperti "(Perintah ...)" atau "(Tool ...)" di jawabanmu.
+- Saat melaporkan hasil uji token: sebutkan status (aktif/tidak), layanan, dan pemilik/akun yang terhubung (field account/pemilik). JANGAN sebut panjang token atau karakter token. Hanya jika ada field formatTidakSesuai, jelaskan bahwa format/panjang token tidak sesuai standar layanan.
+- JANGAN menulis isi pikiran, tag [thinking], atau "tool nama_tool:" sebagai teks. Panggil tool lewat mekanisme tool saja.
 - Untuk melihat secret yang tersimpan pakai list_secrets; untuk menguji apakah token benar dan aktif pakai test_secret. Nilai secret tidak pernah terlihat olehmu dan jangan pernah mencoba menampilkannya.
 - Secret tersedia sebagai environment variable di run_command (mis. $GITHUB_TOKEN). Jangan echo/print nilainya.
 - Folder kerja: /home/user. Jangan jalankan perintah yang berjalan selamanya (server) tanpa '&' di belakang.`;
+
+
+// Model kadang menulis "pikiran" atau pemanggilan tool sebagai teks biasa. Saring sebelum dikirim ke layar.
+const FAKE_TOOL_LINE = /^[ \t>*_`]*tool[ _]?(request_secret|list_secrets|test_secret|run_command|write_file|read_file)\b.*$/gim;
+function cleanModelText(raw: string, final: boolean) {
+  let t = raw
+    .replace(/\[thinking:[\s\S]*?\]\s*/gi, "")
+    .replace(/<think>[\s\S]*?<\/think>\s*/gi, "");
+  const open = t.search(/\[thinking:|<think>/i);
+  if (open >= 0) t = t.slice(0, open);
+  const lastNl = t.lastIndexOf("\n");
+  let body = final ? t : t.slice(0, lastNl + 1);
+  let tail = final ? "" : t.slice(lastNl + 1);
+  body = body.replace(FAKE_TOOL_LINE, "");
+  // Tahan baris terakhir yang mungkin awal dari pola yang disaring.
+  if (/^[ \t>*_`]*(t(o(o(l.*)?)?)?|\[(t(h.*)?)?|<(t(h.*)?)?)$/i.test(tail)) tail = "";
+  return (body + tail).replace(/^\s+/, "");
+}
+
+const SECRET_GUESS: [RegExp, string, string][] = [
+  [/github|gh\b/i, "GITHUB_TOKEN", "github"],
+  [/vercel/i, "VERCEL_TOKEN", "vercel"],
+  [/openai/i, "OPENAI_API_KEY", "openai"],
+  [/anthropic|claude/i, "ANTHROPIC_API_KEY", "anthropic"],
+  [/groq/i, "GROQ_API_KEY", "groq"],
+  [/gemini|google ai/i, "GEMINI_API_KEY", "gemini"],
+  [/hugging ?face|\bhf\b/i, "HF_TOKEN", "huggingface"],
+  [/telegram/i, "TELEGRAM_BOT_TOKEN", "telegram"],
+  [/stripe/i, "STRIPE_SECRET_KEY", "stripe"],
+  [/netlify/i, "NETLIFY_TOKEN", "netlify"],
+  [/cloudflare/i, "CLOUDFLARE_API_TOKEN", "cloudflare"],
+  [/openrouter/i, "OPENROUTER_API_KEY", "openrouter"],
+  [/e2b/i, "E2B_API_KEY", "e2b"],
+];
+
+// Pola format token resmi. Dipakai HANYA untuk memberi tahu jika token tidak sesuai format/panjang.
+const TOKEN_FORMAT: Record<string, { test: RegExp; hint: string }> = {
+  github: { test: /^(gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{82})$/, hint: "Token GitHub biasanya diawali ghp_ (40 karakter) atau github_pat_ (93 karakter)." },
+  vercel: { test: /^[A-Za-z0-9]{24}$|^vc[a-z]_[A-Za-z0-9]{20,}$/, hint: "Token Vercel biasanya 24 karakter alfanumerik." },
+  openai: { test: /^sk-[A-Za-z0-9_-]{20,}$/, hint: "Key OpenAI diawali sk-." },
+  anthropic: { test: /^sk-ant-[A-Za-z0-9_-]{20,}$/, hint: "Key Anthropic diawali sk-ant-." },
+  groq: { test: /^gsk_[A-Za-z0-9]{40,}$/, hint: "Key Groq diawali gsk_ (56 karakter)." },
+  gemini: { test: /^AIza[A-Za-z0-9_-]{35}$/, hint: "Key Gemini diawali AIza (39 karakter)." },
+  huggingface: { test: /^hf_[A-Za-z0-9]{30,}$/, hint: "Token Hugging Face diawali hf_." },
+  telegram: { test: /^\d{6,12}:[A-Za-z0-9_-]{35}$/, hint: "Token bot Telegram berformat angka:35 karakter." },
+  stripe: { test: /^(sk|rk)_(live|test)_[A-Za-z0-9]{20,}$/, hint: "Key Stripe diawali sk_live_ / sk_test_." },
+  openrouter: { test: /^sk-or-[A-Za-z0-9_-]{20,}$/, hint: "Key OpenRouter diawali sk-or-." },
+  e2b: { test: /^e2b_[A-Za-z0-9]{20,}$/, hint: "Key E2B diawali e2b_." },
+};
+function formatWarning(service: string, value: string) {
+  const f = TOKEN_FORMAT[service];
+  return f && !f.test.test(value.trim()) ? f.hint : undefined;
+}
 
 // The "address book": the Kaggle notebook reports its current tunnel URL to a
 // tiny free Redis (Upstash REST) every time it restarts. We read the freshest
@@ -336,7 +391,7 @@ export const Route = createFileRoute("/api/chat")({
             inputSchema: z.object({}),
             execute: async () => ({
               ok: true,
-              secrets: secrets.map((s) => ({ name: s.name, service: s.service, length: s.value.length })),
+              secrets: secrets.map((s) => ({ name: s.name, service: s.service })),
             }),
           }),
           test_secret: tool({
@@ -345,8 +400,17 @@ export const Route = createFileRoute("/api/chat")({
             execute: async ({ name, service }) => {
               const found = secrets.find((s) => s.name === name.toUpperCase());
               if (!found) return { ok: false, name, status: "missing", detail: "Secret belum disimpan." };
-              const r = await verifySecret(service || found.service, found.value);
-              return { ok: r.status === "active", name: found.name, service: service || found.service, ...r };
+              const svc = service || found.service;
+              const r = await verifySecret(svc, found.value);
+              const warn = r.status === "active" ? undefined : formatWarning(svc, found.value);
+              return {
+                ok: r.status === "active",
+                name: found.name,
+                service: svc,
+                ...r,
+                pemilik: r.account,
+                ...(warn ? { formatTidakSesuai: warn } : {}),
+              };
             },
           }),
         };
@@ -362,15 +426,41 @@ export const Route = createFileRoute("/api/chat")({
         });
 
         const toolStartedAt = new Map<string, number>();
+        let rawText = "";
+        let sentText = "";
+        let sawFakeSecret = false;
+        let calledSecret = false;
+        const pushText = (final: boolean) => {
+          const clean = cleanModelText(rawText, final);
+          if (clean.length > sentText.length && clean.startsWith(sentText)) {
+            emit({ t: "text", v: redact(clean.slice(sentText.length)) });
+            sentText = clean;
+          }
+        };
+        const lastUserText = (() => {
+          const m = [...(body.messages as { role: string; parts?: { type: string; text?: string }[] }[])]
+            .reverse()
+            .find((x) => x.role === "user");
+          return (m?.parts ?? []).map((p) => (p.type === "text" ? p.text ?? "" : "")).join(" ");
+        })();
         const stream = new ReadableStream<Uint8Array>({
           async start(controller) {
             controllerRef = controller;
             try {
               for await (const part of result.fullStream) {
-                if (part.type === "text-delta") emit({ t: "text", v: redact(part.text) });
-                else if (part.type === "tool-input-start") {
+                if (part.type === "text-delta") {
+                  rawText += part.text;
+                  if (/tool[ _]?request_secret/i.test(rawText)) sawFakeSecret = true;
+                  pushText(false);
+                } else if (part.type === "finish-step") {
+                  pushText(true);
+                  rawText = sentText = "";
+                } else if (part.type === "tool-input-start") {
+                  pushText(true);
+                  rawText = sentText = "";
                   emit({ t: "tool", id: part.id, name: part.toolName, input: {}, at: Date.now() });
                 } else if (part.type === "tool-call") {
+                  if (part.toolName === "request_secret") calledSecret = true;
                   toolStartedAt.set(part.toolCallId, Date.now());
                   emit({
                     t: "tool",
@@ -396,6 +486,17 @@ export const Route = createFileRoute("/api/chat")({
                   cachedUrl = null;
                   break;
                 }
+              }
+              pushText(true);
+              // Model menulis request_secret sebagai teks: tampilkan formnya sungguhan.
+              if (sawFakeSecret && !calledSecret) {
+                const guessed = SECRET_GUESS.filter(([re]) => re.test(lastUserText)).map(([, name, service]) => ({ name, service }));
+                const list = guessed.length ? guessed : [{ name: "API_TOKEN", service: "other" }];
+                const id = `fake-secret-${Date.now()}`;
+                const at = Date.now();
+                emit({ t: "tool", id, name: "request_secret", input: { secrets: list }, at });
+                emit({ t: "result", id, output: { ok: true, requested: true, names: list.map((x) => x.name) }, at, durationMs: 0 });
+                emit({ t: "text", v: "Silakan isi token di form di atas kotak pesan, lalu klik Terapkan." });
               }
             } catch (error) {
               emit({

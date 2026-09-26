@@ -20,6 +20,17 @@ export const Route = createFileRoute("/chat/$sessionId/terminal")({
   component: TerminalPage,
 });
 
+// Riwayat layar terminal per sesi (bertahan saat pindah menu) supaya tidak terlihat ter-reset.
+const screens = new Map<string, { chunks: Uint8Array[]; size: number }>();
+const MAX_SCREEN = 400_000;
+function remember(sessionId: string, chunk: Uint8Array) {
+  const s = screens.get(sessionId) ?? { chunks: [], size: 0 };
+  s.chunks.push(chunk);
+  s.size += chunk.length;
+  while (s.size > MAX_SCREEN && s.chunks.length > 1) s.size -= s.chunks.shift()!.length;
+  screens.set(sessionId, s);
+}
+
 type Status = "connecting" | "online" | "closed" | "error";
 const KEYS: { label: string; seq: string }[] = [
   { label: "Esc", seq: "\x1b" },
@@ -86,6 +97,7 @@ function TerminalPage() {
       term.loadAddon(fit);
       term.open(host);
       fit.fit();
+      for (const chunk of screens.get(sessionId)?.chunks ?? []) term.write(chunk);
 
       const pidKey = `wengpt:pty:${sessionId}`;
       let sandboxId = getSession(sessionId)?.sandboxId ?? null;
@@ -129,6 +141,7 @@ function TerminalPage() {
       let pending: Uint8Array[] = [];
       let frame = 0;
       const writeOut = (chunk: Uint8Array) => {
+        remember(sessionId, chunk);
         pending.push(chunk);
         if (frame) return;
         frame = requestAnimationFrame(() => {
@@ -198,9 +211,21 @@ function TerminalPage() {
             } else if (event.t === "sandbox") {
               sandboxId = String(event.id);
               setSessionSandbox(sessionId, sandboxId);
-              if (event.fresh) sessionStorage.removeItem(pidKey);
+              if (event.fresh) {
+                sessionStorage.removeItem(pidKey);
+                if (screens.has(sessionId)) {
+                  screens.delete(sessionId);
+                  term.reset();
+                }
+              }
             } else if (event.t === "pid") {
+              const reused = pid === Number(event.pid);
               pid = Number(event.pid);
+              if (!reused && screens.has(sessionId)) {
+                screens.delete(sessionId);
+                term.reset();
+              }
+              if (reused) void post({ action: "resize", sandboxId, pid, cols: term.cols, rows: term.rows }).catch(() => {});
               sessionStorage.setItem(pidKey, String(pid));
               setStatus("online");
               term.focus();
@@ -265,6 +290,7 @@ function TerminalPage() {
           aria-label="Mulai ulang shell"
           onClick={() => {
             sessionStorage.removeItem(`wengpt:pty:${sessionId}`);
+            screens.delete(sessionId);
             setAttempt((n) => n + 1);
           }}
         >
