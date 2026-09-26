@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Bot, ChevronRight, FileText, Paperclip, Plus, Terminal, X } from "lucide-react";
 import { AppNav } from "@/components/app-nav";
-import { AiDots, SecretRequestNote, SecretResultCard, SecretSlider } from "@/components/secret-cards";
+import { AiDots, requestedSecrets, SecretRequestNote, SecretResultCard, SecretSlider } from "@/components/secret-cards";
 import {
   Conversation,
   ConversationContent,
@@ -147,15 +147,31 @@ function Chat() {
   const [input, setInput] = useState("");
   const [uploadError, setUploadError] = useState("");
   const [dismissedSecrets, setDismissedSecrets] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    try {
+      setDismissedSecrets(new Set(JSON.parse(localStorage.getItem("wengpt-secret-done") ?? "[]") as string[]));
+    } catch {
+      /* abaikan */
+    }
+  }, []);
+  const dismissSecrets = (ids: string[]) =>
+    setDismissedSecrets((prev) => {
+      const next = new Set([...prev, ...ids]);
+      localStorage.setItem("wengpt-secret-done", JSON.stringify([...next].slice(-200)));
+      return next;
+    });
   const box = useViewportBox();
   const streaming = snapshot.streamingIds.includes(sessionId);
   const last = session?.messages.at(-1);
   // Form secret terbaru yang masih menunggu diisi, ditampilkan sebagai panel di atas kotak pesan.
-  const secretRun = session?.messages
-    .flatMap((message) => message.parts)
-    .filter((part): part is { type: "tool"; run: ToolRun } => part.type === "tool" && part.run.name === "request_secret")
-    .map((part) => part.run)
-    .at(-1);
+  const lastAssistant = session?.messages.filter((m) => m.role === "assistant").at(-1);
+  const secretRuns = streaming
+    ? []
+    : (lastAssistant?.parts ?? [])
+        .filter((part): part is { type: "tool"; run: ToolRun } => part.type === "tool" && part.run.name === "request_secret")
+        .map((part) => part.run)
+        .filter((run) => !dismissedSecrets.has(run.id));
+  const secretItems = requestedSecrets(secretRuns);
   useEffect(() => {
     if (snapshot.ready && !session) {
       const id = createSession();
@@ -255,7 +271,7 @@ function Chat() {
                         isAnimating={streaming && message.id === last?.id}
                         className="wengpt-markdown min-w-0 max-w-full"
                       >
-                        {part.text}
+                        {part.text.replace(/\(Perintah\s*—\s*exit \?\s*\)\s*/g, "")}
                       </MessageResponse>
                     ) : (
                       <ToolCard key={part.run.id} run={part.run} sessionId={sessionId} />
@@ -286,8 +302,19 @@ function Chat() {
             {uploadError}
           </p>
         )}
-        {secretRun && !dismissedSecrets.has(secretRun.id) && (
-          <SecretSlider run={secretRun} onClose={() => setDismissedSecrets((ids) => new Set(ids).add(secretRun.id))} />
+        {secretItems.length > 0 && (
+          <SecretSlider
+            key={secretRuns.map((r) => r.id).join()}
+            items={secretItems}
+            onClose={() => dismissSecrets(secretRuns.map((r) => r.id))}
+            onDone={(results) => {
+              dismissSecrets(secretRuns.map((r) => r.id));
+              const lines = results
+                .map((r) => `- ${r.name}: ${r.status === "active" ? `aktif${r.account ? ` (${r.account})` : ""}` : r.detail ?? r.status}`)
+                .join("\n");
+              submit(`[Secret diterapkan]\n${lines}`);
+            }}
+          />
         )}
         <PromptInput
           multiple

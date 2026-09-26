@@ -27,3 +27,7 @@
 - [x] Edit nama secret, benahi pemeriksaan otomatis sebelum disimpan, dan tampilkan hasilnya
 - [x] Pindahkan formulir secret AI ke atas input chat dengan animasi slide; hanya titik untuk proses AI
 - [x] Kirim pembaruan ke GitHub
+- [x] Edit nama & nilai secret (nilai tampil untuk diedit), hapus opsi "hanya nama"
+- [x] Form multi-token ringkas di atas input; AI menunggu Terapkan lalu melaporkan status
+- [x] Perbaiki form muncul dua kali dan teks "(Perintah — exit ?)"
+- [x] Kirim pembaruan ke GitHub

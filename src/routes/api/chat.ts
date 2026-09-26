@@ -31,7 +31,8 @@ Aturan:
 - Jika error, BACA pesan error baris per baris, perbaiki akar masalahnya dengan menulis ulang file utuh lewat write_file, lalu uji ulang. Jangan umumkan hasil ke pengguna sebelum uji terakhir berhasil.
 - File dari sesi lain milik pengguna otomatis tersedia di sandbox (File Manager dipakai bersama semua sesi).
 - Lampiran pengguna berada di folder /home/user/attached_assets. Sebutkan nama, tipe, dan ukuran file sebelum menganalisis. Untuk file besar, lihat bagian yang relevan saja dengan tool shell dan jangan menampilkan seluruh isi.
-- Secret/token pengguna: jika pengguna minta menyimpan/load token, API key, atau secret, panggil request_secret (nama HURUF_BESAR, mis. GITHUB_TOKEN) supaya muncul form input aman. JANGAN pernah minta pengguna menempel token di chat.
+- Secret/token pengguna: jika pengguna minta menyimpan/load token, API key, atau secret, panggil request_secret SATU KALI dengan semua token yang diminta di array secrets (nama HURUF_BESAR, mis. GITHUB_TOKEN) supaya muncul satu form input aman. Setelah itu langsung akhiri respons dengan satu kalimat singkat dan tunggu. JANGAN pernah minta pengguna menempel token di chat. Pesan "[Secret diterapkan]" berasal dari sistem setelah pengguna klik Terapkan: laporkan status tiap token dengan rapi.
+- Jangan pernah menulis ringkasan tool seperti "(Perintah ...)" atau "(Tool ...)" di jawabanmu.
 - Untuk melihat secret yang tersimpan pakai list_secrets; untuk menguji apakah token benar dan aktif pakai test_secret. Nilai secret tidak pernah terlihat olehmu dan jangan pernah mencoba menampilkannya.
 - Secret tersedia sebagai environment variable di run_command (mis. $GITHUB_TOKEN). Jangan echo/print nilainya.
 - Folder kerja: /home/user. Jangan jalankan perintah yang berjalan selamanya (server) tanpa '&' di belakang.`;
@@ -306,20 +307,28 @@ export const Route = createFileRoute("/api/chat")({
           }),
           request_secret: tool({
             description:
-              "Tampilkan form input aman di chat agar pengguna memasukkan token/API key. Nilai tidak pernah terlihat olehmu.",
+              "Tampilkan SATU form input aman untuk satu atau beberapa token sekaligus. Panggil sekali saja dengan semua token di array secrets. Nilai tidak pernah terlihat olehmu.",
             inputSchema: z.object({
-              name: z.string().describe("Nama secret HURUF_BESAR, contoh GITHUB_TOKEN"),
-              service: z
-                .string()
-                .optional()
-                .describe("github, vercel, openai, anthropic, groq, gemini, huggingface, telegram, stripe, netlify, cloudflare, e2b, openrouter, atau lainnya"),
+              secrets: z
+                .array(
+                  z.object({
+                    name: z.string().describe("Nama secret HURUF_BESAR, contoh GITHUB_TOKEN"),
+                    service: z
+                      .string()
+                      .optional()
+                      .describe("github, vercel, openai, anthropic, groq, gemini, huggingface, telegram, stripe, netlify, cloudflare, e2b, openrouter, atau lainnya"),
+                  }),
+                )
+                .min(1)
+                .max(8),
               reason: z.string().optional().describe("Kalimat singkat untuk apa token dipakai"),
             }),
-            execute: async ({ name }) => ({
+            execute: async ({ secrets: list }) => ({
               ok: true,
               requested: true,
-              name: name.toUpperCase().replace(/[^A-Z0-9_]/g, "_"),
-              detail: "Form sudah ditampilkan. Minta pengguna mengisi lalu klik Terapkan.",
+              names: list.map((s) => s.name.toUpperCase().replace(/[^A-Z0-9_]/g, "_")),
+              detail:
+                "Form sudah tampil. Akhiri responsmu SEKARANG dengan satu kalimat singkat. Jangan uji token. Setelah pengguna klik Terapkan, sistem mengirim hasil pemeriksaan dan kamu melaporkan statusnya.",
             }),
           }),
           list_secrets: tool({

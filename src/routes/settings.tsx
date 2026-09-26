@@ -32,13 +32,12 @@ import {
   checkSecretValue,
   deleteSecret,
   guessService,
+  getSecretValue,
   loadSecrets,
   recordTest,
-  renameSecret,
   saveSecret,
   SECRET_NAME,
   SERVICE_LABEL,
-  testSecret,
   useSecrets,
   type SecretMeta,
 } from "@/lib/secret-store";
@@ -96,19 +95,18 @@ function SecretDialog({
   onOpenChange: (v: boolean) => void;
   editing: SecretMeta | null;
 }) {
+  const { secrets } = useSecrets();
   const [name, setName] = useState("");
   const [value, setValue] = useState("");
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [renameOnly, setRenameOnly] = useState(false);
   useEffect(() => {
     if (!open) return;
     setName(editing?.name ?? "");
-    setValue("");
+    setValue(editing ? getSecretValue(editing.name) : "");
     setShow(false);
     setError("");
-    setRenameOnly(false);
   }, [open, editing]);
   const clean = name.trim().toUpperCase();
   const valid = SECRET_NAME.test(clean);
@@ -128,25 +126,19 @@ function SecretDialog({
             setBusy(true);
             try {
               setError("");
-              if (editing && renameOnly) {
-                const meta = await renameSecret(editing.name, clean);
-                onOpenChange(false);
-                toast.success(`${meta.name} diperbarui · memeriksa token…`);
-                const result = await testSecret(meta.name);
-                if (result.status === "active") toast.success(`${meta.name} aktif${result.account ? ` · ${result.account}` : ""}`);
-                else toast.error(result.detail ?? "Token belum bisa dipastikan aktif.");
-              } else {
-                // Uji dulu: hanya token aktif yang disimpan.
-                const result = await checkSecretValue(editing?.service ?? guessService(clean), value.trim());
-                if (result.status !== "active") {
-                  setError(`${result.detail ?? "Token tidak valid atau belum aktif."} Tidak disimpan.`);
-                  return;
-                }
-                const meta = await saveSecret(clean, value, editing?.service ?? guessService(clean));
-                await recordTest(meta.name, result);
-                onOpenChange(false);
-                toast.success(`${meta.name} aktif${result.account ? ` · ${result.account}` : ""} · tersimpan aman`);
+              if (editing && clean !== editing.name && secrets.some((s) => s.name === clean))
+                throw new Error("Nama secret sudah dipakai.");
+              // Uji dulu: hanya token aktif yang disimpan.
+              const result = await checkSecretValue(guessService(clean), value.trim());
+              if (result.status !== "active") {
+                setError(`${result.detail ?? "Token tidak valid atau belum aktif."} Tidak disimpan.`);
+                return;
               }
+              const meta = await saveSecret(clean, value, guessService(clean));
+              if (editing && editing.name !== meta.name) await deleteSecret(editing.name);
+              await recordTest(meta.name, result);
+              onOpenChange(false);
+              toast.success(`${meta.name} aktif${result.account ? ` · ${result.account}` : ""} · tersimpan aman`);
             } catch (err) {
               const message = err instanceof Error ? err.message : "Gagal memproses secret.";
               setError(message);
@@ -172,41 +164,33 @@ function SecretDialog({
               </p>
             )}
           </div>
-          {editing && (
-            <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              <input type="checkbox" checked={renameOnly} onChange={(e) => setRenameOnly(e.target.checked)} />
-              Hanya ubah nama (nilai tetap)
-            </label>
-          )}
-          {!renameOnly && (
-            <div className="grid gap-1.5">
-              <label className="text-xs font-medium" htmlFor="secret-value">Nilai</label>
-              <div className="relative">
-                <Input
-                  id="secret-value"
-                  type={show ? "text" : "password"}
-                  value={value}
-                  onChange={(e) => setValue(e.target.value)}
-                  placeholder={editing ? "Biarkan kosong jika nilai tetap" : "Tempel token di sini"}
-                  autoComplete="off"
-                  spellCheck={false}
-                  className="h-11 pr-10 font-mono text-sm"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShow((v) => !v)}
-                  className="absolute inset-y-0 right-0 grid w-10 place-items-center text-muted-foreground"
-                  aria-label={show ? "Sembunyikan" : "Tampilkan"}
-                >
-                  {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                </button>
-              </div>
+          <div className="grid gap-1.5">
+            <label className="text-xs font-medium" htmlFor="secret-value">Nilai</label>
+            <div className="relative">
+              <Input
+                id="secret-value"
+                type={show ? "text" : "password"}
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                placeholder="Tempel token di sini"
+                autoComplete="off"
+                spellCheck={false}
+                className="h-11 pr-10 font-mono text-sm"
+              />
+              <button
+                type="button"
+                onClick={() => setShow((v) => !v)}
+                className="absolute inset-y-0 right-0 grid w-10 place-items-center text-muted-foreground"
+                aria-label={show ? "Sembunyikan" : "Tampilkan"}
+              >
+                {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+              </button>
             </div>
-          )}
+          </div>
           {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Batal</Button>
-             <Button type="submit" disabled={!valid || (!renameOnly && !value.trim()) || busy || (renameOnly && clean === editing?.name)}>
+            <Button type="submit" disabled={!valid || !value.trim() || busy}>
               {busy && <Loader2 className="size-4 animate-spin" />} Terapkan
             </Button>
           </DialogFooter>

@@ -24,6 +24,7 @@ export type ToolRun = {
     name?: string;
     service?: string;
     reason?: string;
+    secrets?: { name: string; service?: string }[];
   };
   output?: ToolOut;
   startedAt: number;
@@ -281,12 +282,15 @@ function summarizeTool(part: Extract<Part, { type: "tool" }>) {
   const { name, input, output } = part.run;
   if (name === "write_file")
     return output?.ok === false
-      ? `(Gagal menulis ${input.path}: ${output.error ?? "error"})`
-      : `(File ${input.path} berhasil ditulis.)`;
-  const result = output
-    ? `exit ${output.exitCode ?? "?"}\n${(output.stdout || output.stderr || "").slice(0, 500)}`
-    : "belum selesai";
-  return `(Perintah ${String(input.command ?? "").slice(0, 250)} — ${result})`;
+      ? `[tool write_file gagal: ${input.path}]`
+      : `[tool write_file: ${input.path}]`;
+  if (name === "run_command") {
+    const result = output
+      ? `exit ${output.exitCode ?? "?"}\n${(output.stdout || output.stderr || "").slice(0, 500)}`
+      : "belum selesai";
+    return `[tool run_command: ${String(input.command ?? "").slice(0, 250)} → ${result}]`;
+  }
+  return `[tool ${name} selesai]`;
 }
 function messageText(message: MessageData) {
   return message.parts

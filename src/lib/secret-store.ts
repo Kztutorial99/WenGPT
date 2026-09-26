@@ -226,6 +226,11 @@ export async function checkSecretValue(service: string, value: string) {
   return { ...body, at: Date.now() };
 }
 
+/** Nilai tersimpan, hanya untuk form edit di halaman Pengaturan. */
+export function getSecretValue(name: string) {
+  return values.get(name) ?? "";
+}
+
 /** Dikirim ke server chat agar AI bisa memakai/menguji secret tanpa melihat nilainya. */
 export function secretPayload() {
   return metas.map((m) => ({ name: m.name, service: m.service, value: values.get(m.name) ?? "" }));
