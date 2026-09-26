@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Bot, ChevronRight, FileText, Paperclip, Plus, Terminal, X } from "lucide-react";
+import { Bot, Brain, ChevronRight, FileText, Paperclip, Plus, Terminal, X } from "lucide-react";
 import { AppNav } from "@/components/app-nav";
 import { AiDots, requestedSecrets, SecretRequestNote, SecretResultCard, SecretSlider } from "@/components/secret-cards";
 import {
@@ -274,6 +274,18 @@ function Chat() {
                       >
                         {part.text.replace(/\(Perintah\s*—\s*exit \?\s*\)\s*/g, "")}
                       </MessageResponse>
+                    ) : part.type === "think" ? (
+                      <details
+                        key={`${message.id}-${index}`}
+                        className="think-box"
+                        open={streaming && message.id === last?.id}
+                      >
+                        <summary>
+                          <Brain className="size-3.5" />
+                          Proses berpikir
+                        </summary>
+                        <p>{part.text.trim()}</p>
+                      </details>
                     ) : (
                       <ToolCard key={part.run.id} run={part.run} sessionId={sessionId} />
                     ),

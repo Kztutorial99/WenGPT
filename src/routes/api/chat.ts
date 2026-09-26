@@ -5,8 +5,7 @@ import { z } from "zod";
 import { Sandbox } from "e2b";
 import { verifySecret } from "@/lib/secret-test.server";
 
-const SYSTEM_PROMPT = `/no_think
-Kamu adalah WenGPT, asisten AI yang ramah dan cerdas. Jawab dalam bahasa yang dipakai pengguna (default Bahasa Indonesia).
+const SYSTEM_PROMPT = `Kamu adalah WenGPT, asisten AI yang ramah dan cerdas. Jawab dalam bahasa yang dipakai pengguna (default Bahasa Indonesia).
 
 Kamu bisa ngobrol biasa, menjelaskan, menulis kode, dan menjawab pertanyaan apa pun.
 Kamu juga punya sandbox Linux (Ubuntu, Python 3, Node.js, pip, npm tersedia, akses internet) lewat tool:
@@ -40,14 +39,10 @@ Aturan:
 - Folder kerja: /home/user. Jangan jalankan perintah yang berjalan selamanya (server) tanpa '&' di belakang.`;
 
 
-// Model kadang menulis "pikiran" atau pemanggilan tool sebagai teks biasa. Saring sebelum dikirim ke layar.
+// Model kadang menulis pemanggilan tool sebagai teks biasa. Saring sebelum dikirim ke layar.
 const FAKE_TOOL_LINE = /^[ \t>*_`]*tool[ _]?(request_secret|list_secrets|test_secret|run_command|write_file|read_file)\b.*$/gim;
 function cleanModelText(raw: string, final: boolean) {
-  let t = raw
-    .replace(/\[thinking:[\s\S]*?\]\s*/gi, "")
-    .replace(/<think>[\s\S]*?<\/think>\s*/gi, "");
-  const open = t.search(/\[thinking:|<think>/i);
-  if (open >= 0) t = t.slice(0, open);
+  const t = raw;
   const lastNl = t.lastIndexOf("\n");
   let body = final ? t : t.slice(0, lastNl + 1);
   let tail = final ? "" : t.slice(lastNl + 1);
@@ -55,6 +50,27 @@ function cleanModelText(raw: string, final: boolean) {
   // Tahan baris terakhir yang mungkin awal dari pola yang disaring.
   if (/^[ \t>*_`]*(t(o(o(l.*)?)?)?|\[(t(h.*)?)?|<(t(h.*)?)?)$/i.test(tail)) tail = "";
   return (body + tail).replace(/^\s+/, "");
+}
+
+// Pisahkan proses berpikir model (<think>…</think> atau [thinking:…]) dari jawaban.
+// Blok yang belum tertutup tetap dialirkan sebagai thinking supaya terlihat langsung.
+function splitThink(raw: string) {
+  let rest = raw;
+  let think = "";
+  rest = rest.replace(/<think>([\s\S]*?)<\/think>/gi, (_m, inner: string) => {
+    think += inner;
+    return "";
+  });
+  rest = rest.replace(/\[thinking:([\s\S]*?)\]/gi, (_m, inner: string) => {
+    think += inner;
+    return "";
+  });
+  const open = rest.search(/<think>|\[thinking:/i);
+  if (open >= 0) {
+    think += rest.slice(open).replace(/^(<think>|\[thinking:?)/i, "");
+    rest = rest.slice(0, open);
+  }
+  return { think, rest };
 }
 
 const SECRET_GUESS: [RegExp, string, string][] = [
@@ -163,6 +179,7 @@ const clip = (s: string, n = 6000) =>
 
 type Ev =
   | { t: "text"; v: string }
+  | { t: "think"; v: string }
   | { t: "sandbox"; id: string }
   | { t: "sandbox_reset" }
   | { t: "tool"; id: string; name: string; input: unknown; at: number }
@@ -422,20 +439,30 @@ export const Route = createFileRoute("/api/chat")({
           tools,
           stopWhen: stepCountIs(24),
           abortSignal: request.signal,
-          providerOptions: { openai: { reasoningEffort: "none" as never } },
+          providerOptions: { openai: { reasoningEffort: "low" as never } },
         });
 
         const toolStartedAt = new Map<string, number>();
         let rawText = "";
         let sentText = "";
+        let sentThink = "";
         let sawFakeSecret = false;
         let calledSecret = false;
         const pushText = (final: boolean) => {
-          const clean = cleanModelText(rawText, final);
+          const { think, rest } = splitThink(rawText);
+          if (think.length > sentThink.length && think.startsWith(sentThink)) {
+            emit({ t: "think", v: redact(think.slice(sentThink.length)) });
+            sentThink = think;
+          }
+          const clean = cleanModelText(rest, final);
           if (clean.length > sentText.length && clean.startsWith(sentText)) {
             emit({ t: "text", v: redact(clean.slice(sentText.length)) });
             sentText = clean;
           }
+        };
+        const resetStep = () => {
+          pushText(true);
+          rawText = sentText = sentThink = "";
         };
         const lastUserText = (() => {
           const m = [...(body.messages as { role: string; parts?: { type: string; text?: string }[] }[])]
@@ -452,12 +479,13 @@ export const Route = createFileRoute("/api/chat")({
                   rawText += part.text;
                   if (/tool[ _]?request_secret/i.test(rawText)) sawFakeSecret = true;
                   pushText(false);
+                } else if (part.type === "reasoning-delta") {
+                  const v = String(part.text ?? "");
+                  if (v) emit({ t: "think", v: redact(v) });
                 } else if (part.type === "finish-step") {
-                  pushText(true);
-                  rawText = sentText = "";
+                  resetStep();
                 } else if (part.type === "tool-input-start") {
-                  pushText(true);
-                  rawText = sentText = "";
+                  resetStep();
                   emit({ t: "tool", id: part.id, name: part.toolName, input: {}, at: Date.now() });
                 } else if (part.type === "tool-call") {
                   if (part.toolName === "request_secret") calledSecret = true;

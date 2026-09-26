@@ -31,7 +31,10 @@ export type ToolRun = {
   finishedAt?: number;
   durationMs?: number;
 };
-export type Part = { type: "text"; text: string } | { type: "tool"; run: ToolRun };
+export type Part =
+  | { type: "text"; text: string }
+  | { type: "think"; text: string }
+  | { type: "tool"; run: ToolRun };
 export type MessageData = {
   id: string;
   role: "user" | "assistant";
@@ -294,7 +297,9 @@ function summarizeTool(part: Extract<Part, { type: "tool" }>) {
 }
 function messageText(message: MessageData) {
   return message.parts
-    .map((part) => (part.type === "text" ? part.text : `\n${summarizeTool(part)}\n`))
+    .map((part) =>
+      part.type === "text" ? part.text : part.type === "think" ? "" : `\n${summarizeTool(part)}\n`,
+    )
     .join("");
 }
 function patchSession(id: string, updater: (session: ChatSession) => ChatSession) {
@@ -480,6 +485,14 @@ export async function sendMessage(
             return last?.type === "text"
               ? [...parts.slice(0, -1), { type: "text", text: last.text + valueText }]
               : [...parts, { type: "text", text: valueText }];
+          });
+        } else if (event.t === "think") {
+          const valueText = String(event["v"] ?? "");
+          patchAssistant(sessionId, assistant.id, (parts) => {
+            const last = parts.at(-1);
+            return last?.type === "think"
+              ? [...parts.slice(0, -1), { type: "think", text: last.text + valueText }]
+              : [...parts, { type: "think", text: valueText }];
           });
         } else if (event.t === "sandbox") {
           patchSession(sessionId, (current) => ({ ...current, sandboxId: String(event["id"]) }));

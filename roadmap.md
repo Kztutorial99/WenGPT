@@ -32,3 +32,4 @@
 - [x] Perbaiki form muncul dua kali dan teks "(Perintah — exit ?)"
 - [x] Kirim pembaruan ke GitHub
 - [x] Saring teks bocor AI, info pemilik token, terminal tidak reset & izin folder; push
+- [x] Hasil cek secret masuk ke jawaban AI tanpa pesan; terminal lebih responsif; push
