@@ -12,7 +12,7 @@ Kamu juga punya sandbox Linux (Ubuntu, Python 3, Node.js, pip, npm tersedia, aks
 - run_command: jalankan perintah shell (install package, jalankan script, cek hasil).
 - web_search: cari info terbaru di internet. Hasil langsung kembali ke kamu (JANGAN simpan hasil pencarian ke file, JANGAN pakai curl/run_command untuk mencari). Pakai OTOMATIS setiap kali pengguna minta cari/cek di web, atau pertanyaan butuh info terkini (berita, harga, versi terbaru, jadwal, cuaca, orang/produk/peristiwa yang mungkin berubah).
 - read_webpage: baca isi teks sebuah URL (misal dari hasil web_search) bila snippet belum cukup.
-Setelah memakai web_search, jawab ringkas dan rapi, lalu cantumkan sumber sebagai link markdown [judul](url).
+Cukup 1-2 kali web_search dengan query berbeda; jika tetap kosong jangan ulang terus, langsung jawab dengan info yang ada. Setelah memakai web_search, jawab ringkas dan rapi, lalu cantumkan sumber sebagai link markdown [judul](url).
 - write_file: tulis file ke sandbox. File yang ditulis dengan write_file otomatis muncul di menu File Manager pengguna.
 
 Aturan:
@@ -219,26 +219,79 @@ function decodeHtml(t: string) {
   return t.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
 }
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36";
-async function webSearch(query: string, max = 6) {
-  const res = await fetch(`https://lite.duckduckgo.com/lite/?kl=id-id&q=${encodeURIComponent(query)}`, {
+type WebHit = { title: string; url: string; snippet: string; site: string };
+const hit = (title: string, url: string, snippet: string): WebHit | null => {
+  if (url.startsWith("//")) url = `https:${url}`;
+  if (!/^https?:/.test(url) || /duckduckgo\.com\/y\.js|bing\.com\/aclick/.test(url)) return null;
+  let site = "";
+  try { site = new URL(url).hostname.replace(/^www\./, ""); } catch { return null; }
+  return { title: decodeHtml(title).slice(0, 160), url, snippet: decodeHtml(snippet).slice(0, 320), site };
+};
+async function searchBing(query: string, max: number) {
+  const res = await fetch(`https://www.bing.com/search?format=rss&setlang=id&cc=ID&q=${encodeURIComponent(query)}`, {
     headers: { "User-Agent": UA, "Accept-Language": "id,en;q=0.8" },
-    signal: AbortSignal.timeout(12_000),
+    signal: AbortSignal.timeout(8_000),
+  });
+  const xml = await res.text();
+  const out: WebHit[] = [];
+  for (const item of xml.match(/<item>[\s\S]*?<\/item>/g) ?? []) {
+    const g = (tag: string) => item.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`))?.[1] ?? "";
+    const h = hit(g("title"), decodeHtml(g("link")), g("description"));
+    if (h) out.push(h);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+async function searchDdgHtml(query: string, max: number) {
+  const res = await fetch("https://html.duckduckgo.com/html/", {
+    method: "POST",
+    headers: { "User-Agent": UA, "Content-Type": "application/x-www-form-urlencoded" },
+    body: `q=${encodeURIComponent(query)}&kl=id-id`,
+    signal: AbortSignal.timeout(8_000),
   });
   const html = await res.text();
-  const out: { title: string; url: string; snippet: string; site: string }[] = [];
+  const out: WebHit[] = [];
+  const re = /class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) && out.length < max) {
+    let url = (m[1] ?? "").replace(/&amp;/g, "&");
+    const u = url.match(/[?&]uddg=([^&]+)/);
+    if (u) url = decodeURIComponent(u[1] ?? "");
+    const h = hit(m[2] ?? "", url, m[3] ?? "");
+    if (h) out.push(h);
+  }
+  return out;
+}
+async function searchDdgLite(query: string, max: number) {
+  const res = await fetch(`https://lite.duckduckgo.com/lite/?kl=id-id&q=${encodeURIComponent(query)}`, {
+    headers: { "User-Agent": UA, "Accept-Language": "id,en;q=0.8" },
+    signal: AbortSignal.timeout(8_000),
+  });
+  const html = await res.text();
+  const out: WebHit[] = [];
   const re = /<a[^>]+href="([^"]+)"[^>]*class='result-link'[^>]*>([\s\S]*?)<\/a>[\s\S]*?class='result-snippet'[^>]*>([\s\S]*?)<\/td>/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(html)) && out.length < max) {
     let url = (m[1] ?? "").replace(/&amp;/g, "&");
     const u = url.match(/[?&]uddg=([^&]+)/);
     if (u) url = decodeURIComponent(u[1] ?? "");
-    if (url.startsWith("//")) url = `https:${url}`;
-    if (!/^https?:/.test(url) || /duckduckgo\.com\/y\.js/.test(url)) continue;
-    let site = "";
-    try { site = new URL(url).hostname.replace(/^www\./, ""); } catch { /* abaikan */ }
-    out.push({ title: decodeHtml(m[2] ?? "").slice(0, 160), url, snippet: decodeHtml(m[3] ?? "").slice(0, 320), site });
+    const h = hit(m[2] ?? "", url, m[3] ?? "");
+    if (h) out.push(h);
   }
   return out;
+}
+const searchCache = new Map<string, { at: number; results: WebHit[] }>();
+async function webSearch(query: string, max = 6) {
+  const key = query.trim().toLowerCase();
+  const cached = searchCache.get(key);
+  if (cached && Date.now() - cached.at < 10 * 60_000) return cached.results;
+  // Jalankan semua sumber paralel, pakai hasil pertama yang tidak kosong.
+  const engines = [searchBing, searchDdgHtml, searchDdgLite].map((fn) =>
+    fn(query, max).then((r) => (r.length ? r : Promise.reject(new Error("kosong")))),
+  );
+  const results = await Promise.any(engines).catch(() => [] as WebHit[]);
+  if (results.length) searchCache.set(key, { at: Date.now(), results });
+  return results;
 }
 async function readWebpage(url: string) {
   const res = await fetch(url, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(12_000), redirect: "follow" });
@@ -366,11 +419,14 @@ export const Route = createFileRoute("/api/chat")({
           return sandbox;
         };
 
+        let searchCalls = 0;
         const tools = {
           web_search: tool({
             description: "Cari informasi terbaru di internet. Hasil (judul, url, snippet) langsung dikembalikan, tidak disimpan ke file.",
             inputSchema: z.object({ query: z.string().min(1).describe("Kata kunci pencarian yang spesifik") }),
             execute: async ({ query }) => {
+              searchCalls += 1;
+              if (searchCalls > 4) return { ok: false, query, results: [], detail: "Batas pencarian tercapai. Jawab sekarang dengan info yang sudah ada." };
               try {
                 const results = await webSearch(query);
                 return { ok: results.length > 0, query, results, ...(results.length ? {} : { detail: "Tidak ada hasil." }) };
