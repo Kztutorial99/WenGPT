@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Bot, ChevronRight, FileText, GitBranch, Paperclip, Plus, X } from "lucide-react";
+import { Bot, Globe, ChevronRight, FileText, GitBranch, Paperclip, Plus, X } from "lucide-react";
 import { AppNav } from "@/components/app-nav";
 import { AiDots, requestedSecrets, SecretSlider } from "@/components/secret-cards";
 import {
@@ -29,6 +29,7 @@ import {
   setActiveSession,
   stopSession,
   type ToolRun,
+  type WebResult,
 } from "@/lib/chat-store";
 import { applySecretResults } from "@/lib/chat-store";
 import { useChatStore } from "@/lib/use-chat-store";
@@ -93,6 +94,34 @@ function AttachmentButton() {
     </PromptInputTools>
   );
 }
+function WebSources({ sources }: { sources: WebResult[] }) {
+  return (
+    <div className="mt-3 min-w-0">
+      <div className="mb-2 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+        <Globe className="size-3.5 text-primary" />
+        Sumber web · {sources.length}
+      </div>
+      <div className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1">
+        {sources.map((s, i) => (
+          <a
+            key={s.url}
+            href={s.url}
+            target="_blank"
+            rel="noreferrer"
+            className="w-52 shrink-0 snap-start rounded-lg border border-border/70 bg-card/60 p-2.5 transition-colors hover:border-primary/50"
+          >
+            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              <img src={`https://www.google.com/s2/favicons?domain=${s.site}&sz=32`} alt="" className="size-3.5 rounded-sm" loading="lazy" />
+              <span className="truncate">{s.site}</span>
+              <span className="ml-auto font-mono">{i + 1}</span>
+            </div>
+            <p className="mt-1.5 line-clamp-2 text-xs font-medium leading-4">{s.title}</p>
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}
 function Chat() {
   const { sessionId } = Route.useParams();
   const snapshot = useChatStore();
@@ -141,8 +170,6 @@ function Chat() {
       setUploadError(error instanceof Error ? error.message : "File gagal dilampirkan."),
     );
   };
-  const waiting = streaming && last?.role === "assistant";
-  const hasVisibleProgress = waiting && last.parts.some((part) => part.type === "think" || part.type === "tool");
   return (
     <main
       style={box}
@@ -207,7 +234,15 @@ function Chat() {
               const complete = runs.filter((run) => !!run.output).length;
               const currentRun = runs.find((run) => !run.output);
               const lastToolIndex = message.parts.reduce((lastIndex, part, index) => part.type === "tool" ? index : lastIndex, -1);
-              const progress = currentRun?.name === "run_command"
+              const sources = message.parts
+                .flatMap((part) => (part.type === "tool" && part.run.name === "web_search" ? (part.run.output?.results ?? []) : []))
+                .filter((r, i, all) => all.findIndex((x) => x.url === r.url) === i)
+                .slice(0, 6);
+              const progress = currentRun?.name === "web_search"
+                ? "Mencari di web"
+                : currentRun?.name === "read_webpage"
+                  ? "Membaca halaman web"
+                  : currentRun?.name === "run_command"
                 ? "Menjalankan perintah"
                 : currentRun?.name === "write_file"
                   ? "Menulis file"
@@ -259,11 +294,12 @@ function Chat() {
                       </div>
                     ) : null,
                   )}
+                  {!active && sources.length > 0 && <WebSources sources={sources} />}
                 </MessageContent>
               </Message>
             )})
           )}
-          {(streaming && last?.role === "user" || waiting && !hasVisibleProgress) && (
+          {streaming && (
             <div className="flex items-center gap-2.5 text-sm" role="status">
               <AiDots />
             </div>

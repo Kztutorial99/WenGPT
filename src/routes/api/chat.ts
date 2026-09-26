@@ -10,6 +10,9 @@ const SYSTEM_PROMPT = `Kamu adalah WenGPT, asisten AI yang ramah dan cerdas. Jaw
 Kamu bisa ngobrol biasa, menjelaskan, menulis kode, dan menjawab pertanyaan apa pun.
 Kamu juga punya sandbox Linux (Ubuntu, Python 3, Node.js, pip, npm tersedia, akses internet) lewat tool:
 - run_command: jalankan perintah shell (install package, jalankan script, cek hasil).
+- web_search: cari info terbaru di internet. Hasil langsung kembali ke kamu (JANGAN simpan hasil pencarian ke file, JANGAN pakai curl/run_command untuk mencari). Pakai OTOMATIS setiap kali pengguna minta cari/cek di web, atau pertanyaan butuh info terkini (berita, harga, versi terbaru, jadwal, cuaca, orang/produk/peristiwa yang mungkin berubah).
+- read_webpage: baca isi teks sebuah URL (misal dari hasil web_search) bila snippet belum cukup.
+Setelah memakai web_search, jawab ringkas dan rapi, lalu cantumkan sumber sebagai link markdown [judul](url).
 - write_file: tulis file ke sandbox. File yang ditulis dengan write_file otomatis muncul di menu File Manager pengguna.
 
 Aturan:
@@ -212,6 +215,42 @@ async function listDirs(sb: Sandbox): Promise<string[]> {
   }
 }
 
+function decodeHtml(t: string) {
+  return t.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+}
+const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36";
+async function webSearch(query: string, max = 6) {
+  const res = await fetch(`https://lite.duckduckgo.com/lite/?kl=id-id&q=${encodeURIComponent(query)}`, {
+    headers: { "User-Agent": UA, "Accept-Language": "id,en;q=0.8" },
+    signal: AbortSignal.timeout(12_000),
+  });
+  const html = await res.text();
+  const out: { title: string; url: string; snippet: string; site: string }[] = [];
+  const re = /<a[^>]+href="([^"]+)"[^>]*class='result-link'[^>]*>([\s\S]*?)<\/a>[\s\S]*?class='result-snippet'[^>]*>([\s\S]*?)<\/td>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) && out.length < max) {
+    let url = (m[1] ?? "").replace(/&amp;/g, "&");
+    const u = url.match(/[?&]uddg=([^&]+)/);
+    if (u) url = decodeURIComponent(u[1] ?? "");
+    if (url.startsWith("//")) url = `https:${url}`;
+    if (!/^https?:/.test(url) || /duckduckgo\.com\/y\.js/.test(url)) continue;
+    let site = "";
+    try { site = new URL(url).hostname.replace(/^www\./, ""); } catch { /* abaikan */ }
+    out.push({ title: decodeHtml(m[2] ?? "").slice(0, 160), url, snippet: decodeHtml(m[3] ?? "").slice(0, 320), site });
+  }
+  return out;
+}
+async function readWebpage(url: string) {
+  const res = await fetch(url, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(12_000), redirect: "follow" });
+  const html = await res.text();
+  const title = decodeHtml(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "");
+  const body = html
+    .replace(/<(script|style|noscript|svg|nav|footer|header)[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<\/(p|div|li|h[1-6]|br|tr)>/gi, "\n");
+  const text = decodeHtml(body.replace(/\n/g, " \u2029 ")).replace(/ ?\u2029 ?/g, "\n").replace(/\n{2,}/g, "\n");
+  return { ok: res.ok, url: res.url || url, title, text: text.slice(0, 8000) };
+}
+
 export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
@@ -328,6 +367,29 @@ export const Route = createFileRoute("/api/chat")({
         };
 
         const tools = {
+          web_search: tool({
+            description: "Cari informasi terbaru di internet. Hasil (judul, url, snippet) langsung dikembalikan, tidak disimpan ke file.",
+            inputSchema: z.object({ query: z.string().min(1).describe("Kata kunci pencarian yang spesifik") }),
+            execute: async ({ query }) => {
+              try {
+                const results = await webSearch(query);
+                return { ok: results.length > 0, query, results, ...(results.length ? {} : { detail: "Tidak ada hasil." }) };
+              } catch (err) {
+                return { ok: false, query, results: [], error: err instanceof Error ? err.message : String(err) };
+              }
+            },
+          }),
+          read_webpage: tool({
+            description: "Ambil dan baca isi teks halaman web dari URL (tanpa menyimpan ke file).",
+            inputSchema: z.object({ url: z.string().url() }),
+            execute: async ({ url }) => {
+              try {
+                return await readWebpage(url);
+              } catch (err) {
+                return { ok: false, url, error: err instanceof Error ? err.message : String(err) };
+              }
+            },
+          }),
           run_command: tool({
             description:
               "Jalankan perintah shell di sandbox Linux. Kembalikan stdout, stderr, dan exit code.",

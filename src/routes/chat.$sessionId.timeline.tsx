@@ -12,6 +12,8 @@ import {
   GitBranch,
   Brain,
   Terminal,
+  Globe,
+  Search,
 } from "lucide-react";
 import { CopyButton } from "@/components/chat-code";
 import { Button } from "@/components/ui/button";
@@ -201,7 +203,50 @@ function ThinkingItem({ entry, number, active }: { entry: Extract<TimelineEntry,
     </li>
   );
 }
+function WebItem({ run, number }: { run: ToolRun; number: number }) {
+  const output = run.output;
+  const search = run.name === "web_search";
+  const failed = !!output && output.ok === false;
+  return (
+    <li id={run.id} className="mb-7 min-w-0 scroll-mt-24">
+      <span className={`absolute -left-[6px] mt-1 size-3 rounded-full border-2 border-background ${!output ? "animate-pulse bg-primary" : failed ? "bg-destructive" : "bg-success"}`} />
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+        <span className="font-mono">{number}.</span>
+        <Globe className="size-3.5 text-primary" />
+        <span>{search ? "Pencarian web" : "Baca halaman"}</span>
+        <span>·</span>
+        <span className={failed ? "text-destructive" : output ? "text-success" : ""}>
+          {!output ? (search ? "Mencari…" : "Membaca…") : failed ? "Gagal" : search ? `${output.results?.length ?? 0} hasil` : "Selesai"}
+        </span>
+        <span className="ml-auto inline-flex items-center gap-1"><Clock3 className="size-3" />{formatTime(run.startedAt)} · {duration(run)}</span>
+      </div>
+      <div className="mt-2 flex min-w-0 items-center gap-2 rounded-md border border-border/65 bg-background/60 px-3 py-2 text-xs">
+        <Search className="size-3.5 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 truncate">{search ? run.input.query : run.input.url}</span>
+      </div>
+      {search && !!output?.results?.length && (
+        <ul className="mt-2 grid gap-1.5">
+          {output.results.map((r) => (
+            <li key={r.url}>
+              <a href={r.url} target="_blank" rel="noreferrer" className="block min-w-0 rounded-md border border-border/50 bg-card/50 px-3 py-2 hover:border-primary/50">
+                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                  <img src={`https://www.google.com/s2/favicons?domain=${r.site}&sz=32`} alt="" className="size-3.5 rounded-sm" loading="lazy" />
+                  <span className="truncate">{r.site}</span>
+                </div>
+                <p className="mt-1 truncate text-xs font-medium">{r.title}</p>
+                <p className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-muted-foreground">{r.snippet}</p>
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+      {!search && output?.title && <p className="mt-1.5 truncate text-[11px] text-muted-foreground">{output.title}</p>}
+      {failed && output?.error && <p className="mt-1.5 text-[11px] text-destructive">{output.error}</p>}
+    </li>
+  );
+}
 function RunItem({ run, number, sessionId }: { run: ToolRun; number: number; sessionId: string }) {
+  if (run.name === "web_search" || run.name === "read_webpage") return <WebItem run={run} number={number} />;
   const output = run.output;
   const failed = !!output && ((output.exitCode ?? 0) !== 0 || output.ok === false);
   const command = run.name === "run_command";

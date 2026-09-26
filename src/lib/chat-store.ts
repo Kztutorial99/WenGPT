@@ -13,7 +13,13 @@ export type ToolOut = {
   requested?: boolean;
   name?: string;
   service?: string;
+  query?: string;
+  results?: WebResult[];
+  url?: string;
+  title?: string;
+  text?: string;
 };
+export type WebResult = { title: string; url: string; snippet: string; site?: string };
 export type ToolRun = {
   id: string;
   name: string;
@@ -24,6 +30,8 @@ export type ToolRun = {
     name?: string;
     service?: string;
     reason?: string;
+    query?: string;
+    url?: string;
     secrets?: { name: string; service?: string }[];
   };
   output?: ToolOut;
@@ -319,6 +327,9 @@ function summarizeTool(part: Extract<Part, { type: "tool" }>) {
       : "belum selesai";
     return `[tool run_command: ${String(input.command ?? "").slice(0, 250)} → ${result}]`;
   }
+  if (name === "web_search")
+    return `[tool web_search: ${input.query ?? ""} → ${(output?.results ?? []).slice(0, 5).map((r) => `${r.title} (${r.url})`).join("; ")}]`;
+  if (name === "read_webpage") return `[tool read_webpage: ${input.url ?? ""}]`;
   return `[tool ${name} selesai]`;
 }
 function messageText(message: MessageData) {
