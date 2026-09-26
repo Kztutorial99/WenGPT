@@ -1,6 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { ArrowLeft, Download, FileText, FolderOpen as FilesIcon, GitBranch, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  ArrowLeft,
+  ChevronRight,
+  Download,
+  FileText,
+  Folder,
+  FolderOpen as FilesIcon,
+  GitBranch,
+  X,
+} from "lucide-react";
 import { CopyButton } from "@/components/chat-code";
 import { Button } from "@/components/ui/button";
 import { loadAllFiles, markFilesRead, normalizePath, type SavedFile } from "@/lib/chat-store";
@@ -19,6 +28,7 @@ export const Route = createFileRoute("/chat/$sessionId/files")({
   }),
   component: FilesPage,
 });
+const ROOT = "/home/user";
 const name = (path: string) => path.split("/").pop() || path;
 async function download(file: SavedFile) {
   const blob = file.attachmentId
@@ -44,12 +54,47 @@ function FilesPage() {
   const { sessionId } = Route.useParams();
   useChatStore();
   const files = loadAllFiles();
+  const [dir, setDir] = useState(ROOT);
   const [open, setOpen] = useState<string | null>(null);
   useEffect(() => {
     markFilesRead();
     const hash = decodeURIComponent(window.location.hash.slice(1));
-    if (hash) setOpen(normalizePath(hash));
+    if (hash) {
+      const path = normalizePath(hash);
+      setOpen(path);
+      setDir(path.split("/").slice(0, -1).join("/") || ROOT);
+    }
   }, []);
+  const { folders, dirFiles } = useMemo(() => {
+    const folderSet = new Map<string, number>();
+    const dirFiles: SavedFile[] = [];
+    for (const file of files) {
+      const rel = file.path.startsWith(`${ROOT}/`) ? file.path.slice(ROOT.length + 1) : file.path;
+      const relDir = rel.includes("/") ? rel.split("/").slice(0, -1).join("/") : "";
+      const currentRel = dir === ROOT ? "" : dir.slice(ROOT.length + 1);
+      if (relDir === currentRel) {
+        dirFiles.push(file);
+        continue;
+      }
+      if (relDir.startsWith(currentRel ? `${currentRel}/` : "")) {
+        const rest = relDir.slice(currentRel ? currentRel.length + 1 : 0);
+        const top = rest.split("/")[0];
+        if (top) folderSet.set(top, (folderSet.get(top) ?? 0) + 1);
+      }
+    }
+    const folders = [...folderSet.entries()]
+      .map(([folderName, count]) => ({ name: folderName, count }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return { folders, dirFiles };
+  }, [files, dir]);
+  const crumbs = useMemo(() => {
+    const rel = dir === ROOT ? "" : dir.slice(ROOT.length + 1);
+    const parts = rel ? rel.split("/") : [];
+    return parts.map((part, index) => ({
+      label: part,
+      path: `${ROOT}/${parts.slice(0, index + 1).join("/")}`,
+    }));
+  }, [dir]);
   const active = files.find((file) => file.path === open);
   return (
     <main className="h-dvh overflow-y-auto bg-background text-foreground">
@@ -75,11 +120,55 @@ function FilesPage() {
         </Button>
       </header>
       <section className="mx-auto max-w-3xl px-4 py-5">
-        {files.length === 0 ? (
-          <p className="py-20 text-center text-sm text-muted-foreground">Belum ada file.</p>
+        <nav className="mb-3 flex min-w-0 items-center gap-1 overflow-x-auto text-xs text-muted-foreground">
+          <button
+            type="button"
+            onClick={() => setDir(ROOT)}
+            className={`shrink-0 rounded px-1.5 py-1 ${dir === ROOT ? "font-semibold text-foreground" : "hover:text-foreground"}`}
+          >
+            Beranda
+          </button>
+          {crumbs.map((crumb, index) => (
+            <span key={crumb.path} className="flex shrink-0 items-center gap-1">
+              <ChevronRight className="size-3 opacity-60" />
+              <button
+                type="button"
+                onClick={() => setDir(crumb.path)}
+                className={`rounded px-1.5 py-1 ${index === crumbs.length - 1 ? "font-semibold text-foreground" : "hover:text-foreground"}`}
+              >
+                {crumb.label}
+              </button>
+            </span>
+          ))}
+        </nav>
+        {folders.length === 0 && dirFiles.length === 0 ? (
+          <p className="py-20 text-center text-sm text-muted-foreground">
+            {dir === ROOT ? "Belum ada file." : "Folder ini kosong."}
+          </p>
         ) : (
           <ul className="overflow-hidden rounded-lg border border-border/70 bg-card/55">
-            {files.map((file) => (
+            {folders.map((folder) => (
+              <li key={folder.name} className="border-b border-border/50 last:border-0">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setDir(dir === ROOT ? `${ROOT}/${folder.name}` : `${dir}/${folder.name}`)}
+                  className="h-auto w-full min-w-0 justify-start rounded-none px-3 py-3 text-left"
+                >
+                  <span className="grid size-9 shrink-0 place-items-center rounded-md bg-muted">
+                    <Folder className="size-4 text-primary" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">{folder.name}</span>
+                    <span className="block truncate text-[11px] font-normal text-muted-foreground">
+                      {folder.count} file
+                    </span>
+                  </span>
+                  <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                </Button>
+              </li>
+            ))}
+            {dirFiles.map((file) => (
               <li key={file.path} className="border-b border-border/50 last:border-0">
                 <Button
                   type="button"
@@ -93,8 +182,7 @@ function FilesPage() {
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium">{name(file.path)}</span>
                     <span className="block truncate font-mono text-[11px] font-normal text-muted-foreground">
-                      {file.path.replace(/^\/home\/user\//, "")}{" "}
-                      {file.size != null ? `· ${formatSize(file.size)}` : ""}
+                      {name(file.path)} {file.size != null ? `· ${formatSize(file.size)}` : ""}
                     </span>
                   </span>
                 </Button>
