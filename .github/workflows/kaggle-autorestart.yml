@@ -1,8 +1,8 @@
-# Cek tiap 20 menit: kalau server AI di akun Kaggle mana pun mati, nyalakan lagi otomatis.
+# Cek tiap 10 menit: kalau server AI di akun Kaggle mana pun mati, nyalakan lagi otomatis.
 name: Kaggle auto-restart
 on:
   schedule:
-    - cron: "*/20 * * * *"
+    - cron: "*/10 * * * *"
   workflow_dispatch:
     inputs:
       force:
@@ -29,13 +29,27 @@ jobs:
           UPSTASH_TOKEN: ${{ secrets.UPSTASH_TOKEN }}
         run: |
           if [ -z "$KAGGLE_USERNAME" ]; then echo "Akun $ACC belum diisi, lewati"; exit 0; fi
-          ALIVE=$(curl -s -H "Authorization: Bearer $UPSTASH_TOKEN" "$UPSTASH_URL/get/foundry:ai-url:$ACC" | python3 -c "import sys,json;d=sys.stdin.read();print((json.loads(d).get('result') or '') if d.strip().startswith('{') else '')")
-          if [ "$FORCE" != "true" ] && [ -n "$ALIVE" ]; then echo "Akun $ACC hidup: $ALIVE"; exit 0; fi
+          up() { curl -s -H "Authorization: Bearer $UPSTASH_TOKEN" "$UPSTASH_URL/$1"; }
+          val() { python3 -c "import sys,json;d=sys.stdin.read();print((json.loads(d).get('result') or '') if d.strip().startswith('{') else '')"; }
+          ALIVE=$(up "get/foundry:ai-url:$ACC" | val)
+          # Cek AI benar-benar merespons lewat alamat publiknya (cloudflared bisa mati walau sesi running)
+          if [ -n "$ALIVE" ] && curl -sf -m 20 "$ALIVE/api/tags" >/dev/null; then
+            up "del/foundry:stale:$ACC" >/dev/null
+            if [ "$FORCE" != "true" ]; then echo "Akun $ACC sehat: $ALIVE"; exit 0; fi
+          fi
           pip install -q kaggle
           SLUG="$KAGGLE_USERNAME/foundry-ai-server"
           STATUS=$(kaggle kernels status "$SLUG" 2>&1 || true)
           echo "$STATUS"
-          if [ "$FORCE" != "true" ] && echo "$STATUS" | grep -qiE "running|queued"; then echo "Masih menyala/loading, tunggu"; exit 0; fi
+          if [ "$FORCE" != "true" ] && echo "$STATUS" | grep -qiE "running|queued"; then
+            # Running tapi AI tidak merespons: beri waktu 1x cek (model mungkin masih dimuat), cek ke-2 restart paksa
+            STALE=$(up "incr/foundry:stale:$ACC" | val)
+            up "expire/foundry:stale:$ACC/3600" >/dev/null
+            echo "Akun $ACC running tapi AI tidak merespons (cek ke-$STALE)"
+            if [ "${STALE:-0}" -lt 2 ]; then echo "Tunggu cek berikutnya"; exit 0; fi
+            echo "Macet terlalu lama -> restart paksa"
+          fi
+          up "del/foundry:stale:$ACC" >/dev/null
           mkdir -p /tmp/k && cd /tmp/k
           sed -e "s|__ACCOUNT_ID__|$ACC|" -e "s|__UPSTASH_URL__|$UPSTASH_URL|" -e "s|__UPSTASH_TOKEN__|$UPSTASH_TOKEN|" \
             "$GITHUB_WORKSPACE/kaggle/foundry_kaggle.py" > foundry_kaggle.py
