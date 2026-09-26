@@ -230,7 +230,7 @@ const hit = (title: string, url: string, snippet: string): WebHit | null => {
 // Cadangan berita: Google News RSS (buka lewat server, formatnya stabil).
 async function searchGoogleNews(query: string, max: number) {
   const res = await fetch(
-    `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=id&gl=ID&ceid=ID:id`,
+    `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&safe=off&hl=id&gl=ID&ceid=ID:id`,
     { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(8_000) },
   );
   const xml = await res.text();
@@ -246,7 +246,7 @@ async function searchGoogleNews(query: string, max: number) {
   return out;
 }
 async function searchBing(query: string, max: number) {
-  const res = await fetch(`https://www.bing.com/search?format=rss&setlang=id&cc=ID&q=${encodeURIComponent(query)}`, {
+  const res = await fetch(`https://www.bing.com/search?format=rss&setlang=id&cc=ID&adlt=off&q=${encodeURIComponent(query)}`, {
     headers: { "User-Agent": UA, "Accept-Language": "id,en;q=0.8" },
     signal: AbortSignal.timeout(8_000),
   });
