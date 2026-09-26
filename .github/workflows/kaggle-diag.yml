@@ -11,18 +11,27 @@ jobs:
       - env:
           KAGGLE_USERNAME: ${{ secrets[format('KAGGLE_USERNAME_{0}', matrix.account)] }}
           KAGGLE_KEY: ${{ secrets[format('KAGGLE_KEY_{0}', matrix.account)] }}
-          UPSTASH_URL: ${{ secrets.UPSTASH_URL }}
-          UPSTASH_TOKEN: ${{ secrets.UPSTASH_TOKEN }}
+          U1: ${{ secrets.UPSTASH_URL }}
+          T1: ${{ secrets.UPSTASH_TOKEN }}
+          U2: ${{ secrets.AI_REGISTRY_URL }}
+          T2: ${{ secrets.AI_REGISTRY_TOKEN }}
         run: |
+          set +e
+          python3 -c "import os
+          for k in ['U1','U2']:
+              v=os.environ[k]; print(k,'len',len(v),'https' if v.startswith('https://') else 'NO-https','ws' if v!=v.strip() else 'clean','upstash' if 'upstash.io' in v else 'not-upstash', 'same' if os.environ['U1']==os.environ['U2'] else 'diff')
+          print('T same', os.environ['T1']==os.environ['T2'], len(os.environ['T1']), len(os.environ['T2']))"
+          echo "U1:"; curl -s -m 10 -H "Authorization: Bearer $T1" "$U1/keys/foundry*"; echo " rc=$?"
+          echo "U2:"; curl -s -m 10 -H "Authorization: Bearer $T2" "$U2/keys/foundry*"; echo " rc=$?"
           pip install -q kaggle
-          curl -s -H "Authorization: Bearer $UPSTASH_TOKEN" "$UPSTASH_URL/keys/foundry*"; echo
-          kaggle kernels status "$KAGGLE_USERNAME/foundry-ai-server" || true
-          mkdir o; kaggle kernels output "$KAGGLE_USERNAME/foundry-ai-server" -p o || true
-          ls -la o; for f in o/*.log o/*.txt; do echo "== $f"; tail -c 3000 "$f"; done
+          kaggle kernels status "$KAGGLE_USERNAME/foundry-ai-server"
+          mkdir o; kaggle kernels output "$KAGGLE_USERNAME/foundry-ai-server" -p o
+          ls -la o
           python3 - <<'P'
           import glob,json
-          for f in glob.glob('o/*.log')+glob.glob('o/*'):
-              try:
-                  d=json.load(open(f)); print("== JSON",f); print("".join(x.get('data','') for x in d)[-4000:])
+          for f in glob.glob('o/*'):
+              t=open(f,errors='ignore').read()
+              try: t="".join(x.get('data','') for x in json.loads(t))
               except Exception: pass
+              print("==",f); print(t[-3500:])
           P
