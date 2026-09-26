@@ -24,3 +24,6 @@
 - [x] Rapikan judul chat dan garis kotak pesan; pertahankan label batas file 20MB
 - [x] Periksa secret otomatis saat diterapkan dan hilangkan tombol uji
 - [x] Periksa status deploy setelah perubahan
+- [x] Edit nama secret, benahi pemeriksaan otomatis sebelum disimpan, dan tampilkan hasilnya
+- [x] Pindahkan formulir secret AI ke atas input chat dengan animasi slide; hanya titik untuk proses AI
+- [x] Kirim pembaruan ke GitHub

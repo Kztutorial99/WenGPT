@@ -157,6 +157,35 @@ export async function saveSecret(name: string, value: string, service?: string) 
   return meta;
 }
 
+export async function renameSecret(oldName: string, newName: string) {
+  await loadSecrets();
+  const clean = newName.trim().toUpperCase();
+  if (!SECRET_NAME.test(clean)) throw new Error("Nama secret hanya huruf besar, angka, dan _.");
+  const old = metas.find((m) => m.name === oldName);
+  const value = values.get(oldName);
+  if (!old || !value) throw new Error("Secret tidak ditemukan.");
+  if (clean === oldName) return old;
+  if (metas.some((m) => m.name === clean)) throw new Error("Nama secret sudah dipakai.");
+  const db = await openDb();
+  const key = await cryptoKey(db);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const data = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(value)));
+  const meta = { ...old, name: clean, service: guessService(clean), updatedAt: Date.now(), lastTest: undefined };
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(STORE, "readwrite");
+    transaction.objectStore(STORE).add({ ...meta, iv: [...iv], data: [...data] });
+    transaction.objectStore(STORE).delete(oldName);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () => reject(transaction.error);
+  });
+  values.delete(oldName);
+  values.set(clean, value);
+  metas = [...metas.filter((m) => m.name !== oldName), meta].sort((a, b) => a.name.localeCompare(b.name));
+  emit();
+  return meta;
+}
+
 export async function deleteSecret(name: string) {
   const db = await openDb();
   await tx(db, STORE, "readwrite", (s) => s.delete(name));
@@ -176,18 +205,25 @@ export async function recordTest(name: string, result: SecretMeta["lastTest"]) {
 }
 
 export async function testSecret(name: string) {
+  await loadSecrets();
   const value = values.get(name);
   const meta = metas.find((m) => m.name === name);
   if (!value || !meta) throw new Error("Secret tidak ditemukan.");
+  const result = await checkSecretValue(meta.service, value);
+  await recordTest(name, result);
+  return result;
+}
+
+export async function checkSecretValue(service: string, value: string) {
   const res = await fetch("/api/secret-test", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, service: meta.service, value }),
+    body: JSON.stringify({ name: "CHECK", service, value }),
   });
+  if (!res.ok) throw new Error("Layanan pengujian tidak tersedia. Coba lagi nanti.");
   const body = (await res.json()) as { status: TestStatus; account?: string; detail?: string };
-  const result = { ...body, at: Date.now() };
-  await recordTest(name, result);
-  return result;
+  if (!["active", "invalid", "unknown", "error"].includes(body.status)) throw new Error("Jawaban pengujian tidak valid.");
+  return { ...body, at: Date.now() };
 }
 
 /** Dikirim ke server chat agar AI bisa memakai/menguji secret tanpa melihat nilainya. */

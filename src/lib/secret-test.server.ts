@@ -64,8 +64,10 @@ export async function verifySecret(service: string, token: string): Promise<Secr
     const res = await fetch(check.url, { headers: check.headers, signal: AbortSignal.timeout(10_000) });
     const json = await res.json().catch(() => null);
     if (res.ok) return { status: "active", account: check.account(json) ?? undefined, detail: "Token valid dan aktif." };
-    if (res.status === 401 || res.status === 403 || res.status === 404)
+    if (res.status === 401)
       return { status: "invalid", detail: `Ditolak layanan (HTTP ${res.status}). Token salah, kedaluwarsa, atau dicabut.` };
+    if (res.status === 403 || res.status === 404)
+      return { status: "error", detail: `Layanan membalas HTTP ${res.status}. Bisa karena izin token kurang, akses dibatasi, atau alamat pemeriksaan tidak tersedia.` };
     return { status: "error", detail: `Layanan membalas HTTP ${res.status}.` };
   } catch {
     return { status: "error", detail: "Layanan tidak bisa dihubungi. Coba lagi nanti." };

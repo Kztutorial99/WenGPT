@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { CheckCircle2, Eye, EyeOff, KeyRound, Loader2, ShieldCheck, ShieldX, ShieldQuestion } from "lucide-react";
+import { CheckCircle2, Eye, EyeOff, KeyRound, Loader2, ShieldCheck, ShieldX, ShieldQuestion, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { type ToolRun } from "@/lib/chat-store";
-import { loadSecrets, saveSecret, testSecret, SERVICE_LABEL, guessService, useSecrets, type TestStatus } from "@/lib/secret-store";
+import { checkSecretValue, loadSecrets, saveSecret, SERVICE_LABEL, guessService, useSecrets, type TestStatus } from "@/lib/secret-store";
 
 export function AiDots({ className = "" }: { className?: string }) {
   return (
@@ -15,7 +15,9 @@ export function AiDots({ className = "" }: { className?: string }) {
   );
 }
 
-export function SecretRequestCard({ run }: { run: ToolRun }) {
+type CheckState = { status: TestStatus; account?: string; detail?: string };
+
+export function SecretForm({ run, onSaved }: { run: ToolRun; onSaved?: () => void }) {
   const name = String(run.output?.name ?? run.input.name ?? "")
     .toUpperCase()
     .replace(/[^A-Z0-9_]/g, "_");
@@ -26,13 +28,12 @@ export function SecretRequestCard({ run }: { run: ToolRun }) {
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [done, setDone] = useState(false);
-  const [check, setCheck] = useState<{ status: TestStatus; detail?: string; account?: string } | null>(null);
+  const [check, setCheck] = useState<CheckState | null>(null);
   useEffect(() => void loadSecrets(), []);
 
   if (!name) {
     return (
-      <div className="my-2 flex items-center gap-2 rounded-xl border border-border/70 bg-card/55 px-3 py-3 text-xs text-muted-foreground">
+      <div className="flex items-center gap-2 px-4 py-3 text-xs text-muted-foreground">
         <KeyRound className="size-4 text-primary" /> Menyiapkan form secret <AiDots />
       </div>
     );
@@ -42,23 +43,22 @@ export function SecretRequestCard({ run }: { run: ToolRun }) {
     setBusy(true);
     setError("");
     try {
+      // Periksa dulu; hanya token aktif yang disimpan.
+      const result = await checkSecretValue(service, value.trim());
+      setCheck(result);
+      if (result.status !== "active") return;
       await saveSecret(name, value, service);
       setValue("");
-      setDone(true);
-      try {
-        setCheck(await testSecret(name));
-      } catch {
-        setCheck({ status: "error", detail: "Pengujian token gagal." });
-      }
+      onSaved?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Gagal menyimpan.");
+      setError(err instanceof Error ? err.message : "Gagal memproses token.");
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <div className="secret-card my-3 overflow-hidden rounded-2xl border border-primary/35 bg-card/80 shadow-panel">
+    <div className="secret-card overflow-hidden rounded-2xl border border-primary/35 bg-card/95 shadow-panel">
       <div className="flex items-center gap-3 border-b border-border/60 px-4 py-3">
         <span className="grid size-9 place-items-center rounded-xl bg-primary/15 text-primary">
           <KeyRound className="size-4" />
@@ -69,11 +69,11 @@ export function SecretRequestCard({ run }: { run: ToolRun }) {
             {SERVICE_LABEL[service] ?? service} · disimpan terenkripsi di perangkat ini
           </p>
         </div>
-        {(done || saved) && <CheckCircle2 className="size-5 shrink-0 text-success" />}
+        {saved && <CheckCircle2 className="size-5 shrink-0 text-success" />}
       </div>
-      {done ? (
-        <p className={`px-4 py-3 text-xs ${check?.status === "active" ? "text-success" : check?.status === "invalid" ? "text-destructive" : "text-muted-foreground"}`}>
-          {!check ? "Tersimpan aman · memeriksa token…" : check.status === "active" ? `Token aktif${check.account ? ` · ${check.account}` : ""}` : check.detail ?? "Token belum dapat dipastikan aktif."}
+      {saved && check?.status === "active" ? (
+        <p className="px-4 py-3 text-xs text-success">
+          {`Token aktif${check.account ? ` · ${check.account}` : ""} · tersimpan aman`}
         </p>
       ) : (
         <form
@@ -107,12 +107,48 @@ export function SecretRequestCard({ run }: { run: ToolRun }) {
             </button>
           </div>
           {error && <p className="text-xs text-destructive">{error}</p>}
+          {check && check.status !== "active" && (
+            <p role="status" className={`text-xs ${check.status === "invalid" ? "text-destructive" : "text-muted-foreground"}`}>
+              {check.detail ?? "Token belum dapat dipastikan aktif."} Belum disimpan.
+            </p>
+          )}
           <Button type="submit" disabled={!value.trim() || busy} className="h-10">
             {busy ? <Loader2 className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}
-            Terapkan
+            {busy ? "Memeriksa…" : "Terapkan"}
           </Button>
         </form>
       )}
+    </div>
+  );
+}
+
+/** Catatan kecil di dalam percakapan; formulirnya ada di panel di atas kotak pesan. */
+export function SecretRequestNote({ run }: { run: ToolRun }) {
+  const name = String(run.output?.name ?? run.input.name ?? "").toUpperCase().replace(/[^A-Z0-9_]/g, "_");
+  const { secrets } = useSecrets();
+  const saved = secrets.some((s) => s.name === name);
+  return (
+    <div className="my-2 flex w-fit items-center gap-2 rounded-xl border border-primary/30 bg-primary/8 px-3 py-2 text-xs">
+      <KeyRound className="size-4 shrink-0 text-primary" />
+      <span>{name ? (saved ? `Token ${name} tersimpan.` : `Form token ${name} ada di panel di atas.`) : "Form secret ditampilkan di panel di atas."}</span>
+    </div>
+  );
+}
+
+export function SecretSlider({ run, onClose }: { run: ToolRun; onClose: () => void }) {
+  return (
+    <div className="secret-slider mx-auto mb-2 w-full max-w-3xl">
+      <div className="relative">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Tutup form secret"
+          className="absolute -top-1 right-0 z-10 grid size-7 place-items-center rounded-full border border-border/70 bg-background/90 text-muted-foreground shadow-panel"
+        >
+          <X className="size-3.5" />
+        </button>
+        <SecretForm run={run} onSaved={onClose} />
+      </div>
     </div>
   );
 }

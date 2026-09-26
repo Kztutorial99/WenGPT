@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Bot, ChevronRight, FileText, Paperclip, Plus, Terminal, X } from "lucide-react";
 import { AppNav } from "@/components/app-nav";
-import { AiDots, SecretRequestCard, SecretResultCard } from "@/components/secret-cards";
+import { AiDots, SecretRequestNote, SecretResultCard, SecretSlider } from "@/components/secret-cards";
 import {
   Conversation,
   ConversationContent,
@@ -64,7 +64,7 @@ function duration(ms?: number) {
       : `${(ms / 1000).toFixed(ms < 10000 ? 1 : 0)} dtk`;
 }
 function ToolCard({ run, sessionId }: { run: ToolRun; sessionId: string }) {
-  if (run.name === "request_secret") return <SecretRequestCard run={run} />;
+  if (run.name === "request_secret") return <SecretRequestNote run={run} />;
   if (run.name === "list_secrets" || run.name === "test_secret") return <SecretResultCard run={run} />;
   const failed = !!run.output && ((run.output.exitCode ?? 0) !== 0 || run.output.ok === false);
   const command = run.name === "run_command";
@@ -146,9 +146,16 @@ function Chat() {
   const session = snapshot.sessions.find((item) => item.id === sessionId);
   const [input, setInput] = useState("");
   const [uploadError, setUploadError] = useState("");
+  const [dismissedSecrets, setDismissedSecrets] = useState<Set<string>>(new Set());
   const box = useViewportBox();
   const streaming = snapshot.streamingIds.includes(sessionId);
   const last = session?.messages.at(-1);
+  // Form secret terbaru yang masih menunggu diisi, ditampilkan sebagai panel di atas kotak pesan.
+  const secretRun = session?.messages
+    .flatMap((message) => message.parts)
+    .filter((part): part is { type: "tool"; run: ToolRun } => part.type === "tool" && part.run.name === "request_secret")
+    .map((part) => part.run)
+    .at(-1);
   useEffect(() => {
     if (snapshot.ready && !session) {
       const id = createSession();
@@ -260,7 +267,6 @@ function Chat() {
           )}
           {(runningTool || waiting) && (
             <div className="flex items-center gap-2.5 text-sm" role="status">
-              <span className="ai-orb" aria-hidden />
               {runningTool ? (
                 <Shimmer className="text-sm">Sedang mengerjakan…</Shimmer>
               ) : (
@@ -279,6 +285,9 @@ function Chat() {
           <p role="alert" className="mx-auto mb-2 max-w-3xl text-xs text-destructive">
             {uploadError}
           </p>
+        )}
+        {secretRun && !dismissedSecrets.has(secretRun.id) && (
+          <SecretSlider run={secretRun} onClose={() => setDismissedSecrets((ids) => new Set(ids).add(secretRun.id))} />
         )}
         <PromptInput
           multiple

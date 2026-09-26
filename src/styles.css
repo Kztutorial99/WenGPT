@@ -52,6 +52,6 @@
 .ai-dots > span:nth-child(2) { animation-delay: .15s; }
 .ai-dots > span:nth-child(3) { animation-delay: .3s; }
 @keyframes ai-wave { 0%, 70%, 100% { transform: translateY(0) scale(.8); opacity: .35; } 35% { transform: translateY(-5px) scale(1); opacity: 1; } }
-.ai-orb { position: relative; width: 18px; height: 18px; border-radius: 9999px; background: conic-gradient(from 0deg, var(--primary), transparent 65%, var(--primary)); animation: ai-spin 1s linear infinite; -webkit-mask: radial-gradient(circle, transparent 5px, #000 6px); mask: radial-gradient(circle, transparent 5px, #000 6px); }
-@keyframes ai-spin { to { transform: rotate(360deg); } }
 .secret-card { animation: fade-in .3s ease-out; }
+.secret-slider { animation: secret-slide-up .35s cubic-bezier(.2,.9,.25,1.1) both; }
+@keyframes secret-slide-up { from { opacity: 0; transform: translateY(18px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }

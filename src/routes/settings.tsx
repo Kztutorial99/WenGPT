@@ -29,9 +29,12 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
+  checkSecretValue,
   deleteSecret,
   guessService,
   loadSecrets,
+  recordTest,
+  renameSecret,
   saveSecret,
   SECRET_NAME,
   SERVICE_LABEL,
@@ -97,11 +100,15 @@ function SecretDialog({
   const [value, setValue] = useState("");
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [renameOnly, setRenameOnly] = useState(false);
   useEffect(() => {
     if (!open) return;
     setName(editing?.name ?? "");
     setValue("");
     setShow(false);
+    setError("");
+    setRenameOnly(false);
   }, [open, editing]);
   const clean = name.trim().toUpperCase();
   const valid = SECRET_NAME.test(clean);
@@ -109,7 +116,7 @@ function SecretDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[92vw] rounded-2xl sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-base">{editing ? "Ganti nilai secret" : "Tambah secret"}</DialogTitle>
+          <DialogTitle className="text-base">{editing ? "Edit secret" : "Tambah secret"}</DialogTitle>
           <DialogDescription className="text-xs">
             Nilai dienkripsi di perangkat ini dan tidak pernah ditampilkan di chat.
           </DialogDescription>
@@ -120,15 +127,30 @@ function SecretDialog({
             e.preventDefault();
             setBusy(true);
             try {
-              const meta = await saveSecret(clean, value);
-              onOpenChange(false);
-              toast.success(`${meta.name} tersimpan · memeriksa token…`);
-              void testSecret(meta.name).then((result) => {
+              setError("");
+              if (editing && renameOnly) {
+                const meta = await renameSecret(editing.name, clean);
+                onOpenChange(false);
+                toast.success(`${meta.name} diperbarui · memeriksa token…`);
+                const result = await testSecret(meta.name);
                 if (result.status === "active") toast.success(`${meta.name} aktif${result.account ? ` · ${result.account}` : ""}`);
-                else toast.error(result.detail ?? "Token tidak aktif.");
-              }).catch(() => toast.error("Pengujian token gagal."));
+                else toast.error(result.detail ?? "Token belum bisa dipastikan aktif.");
+              } else {
+                // Uji dulu: hanya token aktif yang disimpan.
+                const result = await checkSecretValue(editing?.service ?? guessService(clean), value.trim());
+                if (result.status !== "active") {
+                  setError(`${result.detail ?? "Token tidak valid atau belum aktif."} Tidak disimpan.`);
+                  return;
+                }
+                const meta = await saveSecret(clean, value, editing?.service ?? guessService(clean));
+                await recordTest(meta.name, result);
+                onOpenChange(false);
+                toast.success(`${meta.name} aktif${result.account ? ` · ${result.account}` : ""} · tersimpan aman`);
+              }
             } catch (err) {
-              toast.error(err instanceof Error ? err.message : "Gagal menyimpan.");
+              const message = err instanceof Error ? err.message : "Gagal memproses secret.";
+              setError(message);
+              toast.error(message);
             } finally {
               setBusy(false);
             }
@@ -139,7 +161,6 @@ function SecretDialog({
             <Input
               id="secret-name"
               value={name}
-              disabled={!!editing}
               onChange={(e) => setName(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, "_"))}
               placeholder="GITHUB_TOKEN"
               autoComplete="off"
@@ -151,32 +172,41 @@ function SecretDialog({
               </p>
             )}
           </div>
-          <div className="grid gap-1.5">
-            <label className="text-xs font-medium" htmlFor="secret-value">Nilai</label>
-            <div className="relative">
-              <Input
-                id="secret-value"
-                type={show ? "text" : "password"}
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                placeholder="Tempel token di sini"
-                autoComplete="off"
-                spellCheck={false}
-                className="h-11 pr-10 font-mono text-sm"
-              />
-              <button
-                type="button"
-                onClick={() => setShow((v) => !v)}
-                className="absolute inset-y-0 right-0 grid w-10 place-items-center text-muted-foreground"
-                aria-label={show ? "Sembunyikan" : "Tampilkan"}
-              >
-                {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-              </button>
+          {editing && (
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <input type="checkbox" checked={renameOnly} onChange={(e) => setRenameOnly(e.target.checked)} />
+              Hanya ubah nama (nilai tetap)
+            </label>
+          )}
+          {!renameOnly && (
+            <div className="grid gap-1.5">
+              <label className="text-xs font-medium" htmlFor="secret-value">Nilai</label>
+              <div className="relative">
+                <Input
+                  id="secret-value"
+                  type={show ? "text" : "password"}
+                  value={value}
+                  onChange={(e) => setValue(e.target.value)}
+                  placeholder={editing ? "Biarkan kosong jika nilai tetap" : "Tempel token di sini"}
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="h-11 pr-10 font-mono text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShow((v) => !v)}
+                  className="absolute inset-y-0 right-0 grid w-10 place-items-center text-muted-foreground"
+                  aria-label={show ? "Sembunyikan" : "Tampilkan"}
+                >
+                  {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
             </div>
-          </div>
+          )}
+          {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Batal</Button>
-            <Button type="submit" disabled={!valid || !value.trim() || busy}>
+             <Button type="submit" disabled={!valid || (!renameOnly && !value.trim()) || busy || (renameOnly && clean === editing?.name)}>
               {busy && <Loader2 className="size-4 animate-spin" />} Terapkan
             </Button>
           </DialogFooter>
@@ -236,7 +266,7 @@ function SecretsPanel() {
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center">
-                  <Button variant="ghost" size="icon" title="Ganti nilai" aria-label={`Ganti ${s.name}`} onClick={() => { setEditing(s); setDialog(true); }}>
+                   <Button variant="ghost" size="icon" title="Edit nama atau nilai" aria-label={`Edit ${s.name}`} onClick={() => { setEditing(s); setDialog(true); }}>
                     <Pencil className="size-4" />
                   </Button>
                   <Button variant="ghost" size="icon" title="Hapus" aria-label={`Hapus ${s.name}`} className="text-destructive" onClick={() => setRemoving(s)}>
