@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Bot, Brain, ChevronRight, FileText, Paperclip, Plus, Terminal, X } from "lucide-react";
+import { Bot, ChevronRight, FileText, GitBranch, Paperclip, Plus, X } from "lucide-react";
 import { AppNav } from "@/components/app-nav";
-import { AiDots, requestedSecrets, SecretRequestNote, SecretResultCard, SecretSlider } from "@/components/secret-cards";
+import { AiDots, requestedSecrets, SecretSlider } from "@/components/secret-cards";
 import {
   Conversation,
   ConversationContent,
@@ -21,11 +21,10 @@ import {
   usePromptInputAttachments,
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
-import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
 import {
   createSession,
-  getSession,
+  loadCheckpoints,
   sendMessage,
   setActiveSession,
   stopSession,
@@ -57,55 +56,6 @@ const STARTERS = [
   "Cek versi Python dan Node di sandbox",
   "Buatkan script Python sederhana",
 ];
-function duration(ms?: number) {
-  return ms == null
-    ? ""
-    : ms < 1000
-      ? `${ms} md`
-      : `${(ms / 1000).toFixed(ms < 10000 ? 1 : 0)} dtk`;
-}
-function ToolCard({ run, sessionId }: { run: ToolRun; sessionId: string }) {
-  if (run.name === "request_secret") return <SecretRequestNote run={run} />;
-  if (run.name === "list_secrets" || run.name === "test_secret") return <SecretResultCard run={run} />;
-  const failed = !!run.output && ((run.output.exitCode ?? 0) !== 0 || run.output.ok === false);
-  const command = run.name === "run_command";
-  return (
-    <Link
-      to={command ? "/chat/$sessionId/timeline" : "/chat/$sessionId/files"}
-      params={{ sessionId }}
-      hash={command ? run.id : String(run.input.path ?? "")}
-      className="my-2 flex min-w-0 items-center gap-2.5 rounded-lg border border-border/70 bg-card/55 px-3 py-2.5 transition-colors hover:border-primary/45 active:bg-muted"
-    >
-      {command ? (
-        <Terminal className="size-4 shrink-0 text-primary" />
-      ) : (
-        <FileText className="size-4 shrink-0 text-primary" />
-      )}
-      <span className="min-w-0 flex-1 truncate font-mono text-xs">
-        {(command ? run.input.command : run.input.path) ||
-          (command ? <AiDots /> : "Menyusun isi file…")}
-      </span>
-      <span
-        className={`shrink-0 text-[11px] ${failed ? "text-destructive" : run.output ? "text-success" : "text-muted-foreground"}`}
-      >
-        {!run.output ? (
-          command && !run.input.command ? (
-            <AiDots />
-          ) : (
-            <Shimmer className="text-[11px]">{command ? "Menjalankan…" : "Menulis file…"}</Shimmer>
-          )
-        ) : (run.output as { cancelled?: boolean }).cancelled ? (
-          "Dibatalkan"
-        ) : failed ? (
-          "Gagal"
-        ) : (
-          duration(run.durationMs) || "Selesai"
-        )}
-      </span>
-      <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-    </Link>
-  );
-}
 function AttachmentHeader() {
   const attachments = usePromptInputAttachments();
   return (
@@ -166,6 +116,7 @@ function Chat() {
   const box = useViewportBox();
   const streaming = snapshot.streamingIds.includes(sessionId);
   const last = session?.messages.at(-1);
+  const checkpoints = loadCheckpoints(sessionId);
   // Form secret terbaru yang masih menunggu diisi, ditampilkan sebagai panel di atas kotak pesan.
   const lastAssistant = session?.messages.filter((m) => m.role === "assistant").at(-1);
   const secretRuns = streaming
@@ -191,13 +142,7 @@ function Chat() {
     );
   };
   const waiting = streaming && last?.role === "assistant";
-  const runningTool =
-    streaming &&
-    last?.role === "assistant" &&
-    last.parts.some((part) => part.type === "tool" && !part.run.output);
-  // Titik "…" disembunyikan saat AI sedang mengetik jawaban.
-  const lastPart = last?.role === "assistant" ? last.parts.at(-1) : undefined;
-  const typing = lastPart?.type === "text" && lastPart.text.trim().length > 0;
+  const hasVisibleProgress = waiting && last.parts.some((part) => part.type === "think" || part.type === "tool");
   return (
     <main
       style={box}
@@ -253,7 +198,21 @@ function Chat() {
               </div>
             </section>
           ) : (
-            session.messages.map((message) => (
+            session.messages.map((message) => {
+              const checkpoint = message.role === "assistant"
+                ? checkpoints.find((item) => item.messageIds.includes(message.id))
+                : undefined;
+              const active = streaming && message.id === last?.id;
+              const runs = checkpoint?.runs ?? [];
+              const complete = runs.filter((run) => !!run.output).length;
+              const currentRun = runs.find((run) => !run.output);
+              const lastToolIndex = message.parts.reduce((lastIndex, part, index) => part.type === "tool" ? index : lastIndex, -1);
+              const progress = currentRun?.name === "run_command"
+                ? "Menjalankan perintah"
+                : currentRun?.name === "write_file"
+                  ? "Menulis file"
+                  : currentRun ? "Sedang memproses" : active ? "Sedang berpikir" : "Proses selesai";
+              return (
               <Message key={message.id} from={message.role} className="min-w-0 max-w-full">
                 {message.role === "assistant" && (
                   <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
@@ -270,28 +229,27 @@ function Chat() {
                       : "w-full overflow-visible"
                   }
                 >
+                  {checkpoint && (
+                    <Button asChild variant="outline" className="mb-2 h-auto w-full justify-start gap-2 rounded-md border-border/70 bg-card/55 px-3 py-2 text-left text-xs font-normal hover:border-primary/45">
+                      <Link to="/chat/$sessionId/timeline" params={{ sessionId }} hash={checkpoint.id}>
+                        <GitBranch className={`size-4 shrink-0 text-primary ${active ? "animate-pulse" : ""}`} />
+                        <span className="min-w-0 flex-1 truncate">Linimasa · {active ? progress : `${complete} langkah selesai`}</span>
+                        <span className="shrink-0 text-muted-foreground">{checkpoint.entries.length} aktivitas</span>
+                        <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                      </Link>
+                    </Button>
+                  )}
                   {message.parts.map((part, index) =>
                     part.type === "text" ? (
+                      active || index < lastToolIndex ? null :
                       <MessageResponse
                         key={`${message.id}-${index}`}
-                        isAnimating={streaming && message.id === last?.id}
+                         isAnimating={false}
                         className="wengpt-markdown min-w-0 max-w-full"
                       >
                         {part.text.replace(/\(Perintah\s*—\s*exit \?\s*\)\s*/g, "")}
                       </MessageResponse>
-                    ) : part.type === "think" ? (
-                      <details
-                        key={`${message.id}-${index}`}
-                        className="think-box"
-                        open={streaming && message.id === last?.id}
-                      >
-                        <summary>
-                          <Brain className="size-3.5" />
-                          Proses berpikir
-                        </summary>
-                        <p>{part.text.trim()}</p>
-                      </details>
-                    ) : part.type === "cancelled" ? (
+                    ) : part.type === "think" || part.type === "tool" ? null : part.type === "cancelled" ? (
                       <div
                         key={`${message.id}-${index}`}
                         className="mt-1 inline-flex w-fit items-center gap-1.5 rounded-full border border-destructive/40 bg-destructive/10 px-2.5 py-1 text-[11px] font-medium text-destructive"
@@ -299,21 +257,15 @@ function Chat() {
                         <X className="size-3" />
                         Pesan dibatalkan
                       </div>
-                    ) : (
-                      <ToolCard key={part.run.id} run={part.run} sessionId={sessionId} />
-                    ),
+                    ) : null,
                   )}
                 </MessageContent>
               </Message>
-            ))
+            )})
           )}
-          {(runningTool || (waiting && !typing) || (streaming && last?.role === "user")) && (
+          {(streaming && last?.role === "user" || waiting && !hasVisibleProgress) && (
             <div className="flex items-center gap-2.5 text-sm" role="status">
-              {runningTool ? (
-                <Shimmer className="text-sm">Sedang Memproses…</Shimmer>
-              ) : (
-                <AiDots />
-              )}
+              <AiDots />
             </div>
           )}
         </ConversationContent>

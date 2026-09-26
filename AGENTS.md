@@ -14,3 +14,4 @@
 - Chat sessions are browser-persisted and route-addressed under `/chat/$sessionId`; one E2B sandbox ID belongs to one session so files and packages never bleed across sessions.
 - Active chat streams live in the module-level chat store so internal route navigation does not cancel the in-flight request.
 - Uploaded attachment blobs live in IndexedDB while browser-local chat metadata keeps only safe previews and references, because 20 MB files exceed localStorage capacity.
+- Keep AI reasoning and execution details in per-turn timeline entries, with one compact chat link and completed answer text only, so the conversation remains readable during long runs.

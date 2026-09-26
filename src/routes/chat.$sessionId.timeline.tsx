@@ -10,11 +10,12 @@ import {
   FileText,
   FolderOpen as Files,
   GitBranch,
+  Brain,
   Terminal,
 } from "lucide-react";
 import { CopyButton } from "@/components/chat-code";
 import { Button } from "@/components/ui/button";
-import { loadCheckpoints, markTimelineRead, type Checkpoint, type ToolRun } from "@/lib/chat-store";
+import { loadCheckpoints, markTimelineRead, type Checkpoint, type TimelineEntry, type ToolRun } from "@/lib/chat-store";
 import { useChatStore } from "@/lib/use-chat-store";
 export const Route = createFileRoute("/chat/$sessionId/timeline")({
   head: () => ({
@@ -22,12 +23,12 @@ export const Route = createFileRoute("/chat/$sessionId/timeline")({
       { title: "Linimasa eksekusi — WenGPT" },
       {
         name: "description",
-        content: "Langkah, waktu, durasi, dan hasil pekerjaan WenGPT untuk satu sesi.",
+        content: "Proses berpikir, langkah, waktu, dan hasil pekerjaan WenGPT untuk satu sesi.",
       },
       { property: "og:title", content: "Linimasa eksekusi — WenGPT" },
       {
         property: "og:description",
-        content: "Langkah, waktu, durasi, dan hasil pekerjaan WenGPT untuk satu sesi.",
+        content: "Proses berpikir, langkah, waktu, dan hasil pekerjaan WenGPT untuk satu sesi.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -65,22 +66,30 @@ function Block({ label, text, failed }: { label: string; text: string; failed?: 
 }
 function Timeline() {
   const { sessionId } = Route.useParams();
-  useChatStore();
+  const snapshot = useChatStore();
   const [index, setIndex] = useState<number | null>(null);
   const checkpoints = loadCheckpoints(sessionId);
+  const streaming = snapshot.streamingIds.includes(sessionId);
   useEffect(() => {
     markTimelineRead(sessionId);
   }, [sessionId]);
   useEffect(() => {
     if (index === null && checkpoints.length) {
       const hash = window.location.hash.slice(1);
-      const found = checkpoints.findIndex((c) => c.runs.some((r) => r.id === hash));
+      const found = checkpoints.findIndex((c) => c.id === hash || c.entries.some((entry) => entry.id === hash));
       setIndex(found >= 0 ? found : checkpoints.length - 1);
     }
-  }, [checkpoints, index]);
+  }, [checkpoints.length, index, sessionId]);
+  useEffect(() => {
+    const hash = window.location.hash.slice(1);
+    const found = checkpoints.findIndex((c) => c.id === hash || c.entries.some((entry) => entry.id === hash));
+    if (found >= 0) setIndex(found);
+  }, [sessionId]);
   const current = index === null ? undefined : checkpoints[index];
   const runs = current?.runs ?? [];
+  const entries = current?.entries ?? [];
   const done = useMemo(() => runs.filter((run) => run.output).length, [runs]);
+  const active = streaming && current?.id === checkpoints.at(-1)?.id;
   return (
     <main className="h-dvh min-w-0 overflow-y-auto overscroll-contain bg-background text-foreground">
       <header className="sticky top-0 z-20 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-border/60 bg-background/88 px-4 py-3 backdrop-blur-xl sm:px-6">
@@ -96,8 +105,8 @@ function Timeline() {
           </div>
           <p className="truncate text-[11px] text-muted-foreground">
             {current
-              ? `Checkpoint ${(index ?? 0) + 1} dari ${checkpoints.length} · ${done}/${runs.length} langkah`
-              : "Belum ada eksekusi"}
+              ? `Proses ${(index ?? 0) + 1} dari ${checkpoints.length} · ${done}/${runs.length} langkah${active ? " · berlangsung" : ""}`
+              : "Belum ada proses"}
           </p>
         </div>
         <Button asChild variant="outline" size="icon">
@@ -109,7 +118,7 @@ function Timeline() {
       <section className="mx-auto w-full max-w-3xl px-4 pt-5 pb-[max(2rem,env(safe-area-inset-bottom))] sm:px-6">
         {!current ? (
           <p className="py-20 text-center text-sm text-muted-foreground">
-            Belum ada langkah. Minta WenGPT menjalankan pekerjaan di sandbox.
+             Belum ada proses berpikir atau langkah untuk sesi ini.
           </p>
         ) : (
           <>
@@ -120,10 +129,15 @@ function Timeline() {
               onChange={setIndex}
             />
             <ol className="relative ml-1 border-l border-border/80 pl-5">
-              {runs.map((run, i) => (
-                <RunItem key={run.id} run={run} number={i + 1} sessionId={sessionId} />
+              {entries.map((entry, i) => (
+                entry.type === "think" ? (
+                  <ThinkingItem key={entry.id} entry={entry} number={i + 1} active={!!active && i === entries.length - 1} />
+                ) : (
+                  <RunItem key={entry.id} run={entry.run} number={i + 1} sessionId={sessionId} />
+                )
               ))}
             </ol>
+            {active && <p role="status" className="ml-6 flex items-center gap-2 text-xs text-muted-foreground"><span className="size-1.5 animate-pulse rounded-full bg-primary" />Proses masih berjalan…</p>}
           </>
         )}
       </section>
@@ -156,7 +170,7 @@ function CheckpointPicker({
           <Clock3 className="size-3.5" />
           <span>{formatTime(current.startedAt)}</span>
           <span>·</span>
-          <span>{index === total - 1 ? "Terbaru" : `Checkpoint ${index + 1}`}</span>
+          <span>{index === total - 1 ? "Terbaru" : `Proses ${index + 1}`}</span>
         </div>
         <p className="truncate text-sm font-medium">{current.ask}</p>
       </div>
@@ -169,6 +183,22 @@ function CheckpointPicker({
         <ChevronRight className="size-4" />
       </Button>
     </div>
+  );
+}
+function ThinkingItem({ entry, number, active }: { entry: Extract<TimelineEntry, { type: "think" }>; number: number; active: boolean }) {
+  return (
+    <li id={entry.id} className="mb-7 min-w-0 scroll-mt-24">
+      <span className={`absolute -left-[6px] mt-1 size-3 rounded-full border-2 border-background ${active ? "animate-pulse bg-primary" : "bg-success"}`} />
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <span className="font-mono">{number}.</span>
+        <Brain className="size-3.5" />
+        <span>Proses berpikir</span>
+        <span className="ml-auto">{formatTime(entry.at)}</span>
+      </div>
+      <div className="mt-2 min-w-0 rounded-md border border-border/65 bg-background/60 px-3 py-2.5 text-xs leading-5 whitespace-pre-wrap break-words text-muted-foreground">
+        {entry.text.trim() || "Sedang berpikir…"}
+      </div>
+    </li>
   );
 }
 function RunItem({ run, number, sessionId }: { run: ToolRun; number: number; sessionId: string }) {

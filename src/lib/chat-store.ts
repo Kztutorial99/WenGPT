@@ -50,7 +50,10 @@ export type ChatSession = {
   sandboxId: string | null;
   messages: MessageData[];
 };
-export type Checkpoint = { id: string; ask: string; startedAt: number; runs: ToolRun[] };
+export type TimelineEntry =
+  | { type: "think"; id: string; text: string; at: number }
+  | { type: "tool"; id: string; run: ToolRun; at: number };
+export type Checkpoint = { id: string; ask: string; startedAt: number; runs: ToolRun[]; entries: TimelineEntry[]; messageIds: string[] };
 export type SavedFile = {
   path: string;
   content: string;
@@ -609,14 +612,24 @@ export function loadCheckpoints(sessionId: string): Checkpoint[] {
         ask: part?.type === "text" ? part.text : "",
         startedAt: message.createdAt,
         runs: [],
+        entries: [],
+        messageIds: [],
       };
       list.push(current);
       continue;
     }
-    for (const part of message.parts)
-      if (part.type === "tool" && current) current.runs.push(part.run);
+    if (!current) continue;
+    current.messageIds.push(message.id);
+    message.parts.forEach((part, index) => {
+      if (part.type === "tool") {
+        current?.runs.push(part.run);
+        current?.entries.push({ type: "tool", id: part.run.id, run: part.run, at: part.run.startedAt });
+      } else if (part.type === "think") {
+        current?.entries.push({ type: "think", id: `${message.id}-think-${index}`, text: part.text, at: message.createdAt });
+      }
+    });
   }
-  return list.filter((checkpoint) => checkpoint.runs.length);
+  return list.filter((checkpoint) => checkpoint.entries.length);
 }
 export function normalizePath(path: string) {
   return path.startsWith("/") ? path : `/home/user/${path}`;

@@ -1,5 +1,6 @@
 # Roadmap
 
+- [x] Satukan proses berpikir dan eksekusi dalam Linimasa; chat hanya menampilkan pintasan ringkas dan hasil setelah selesai
 - [x] Sesi chat terpisah dan riwayat browser
 - [x] Streaming tetap berjalan saat pindah halaman
 - [x] Sandbox dan file terpisah per sesi
@@ -33,3 +34,5 @@
 - [x] Kirim pembaruan ke GitHub
 - [x] Saring teks bocor AI, info pemilik token, terminal tidak reset & izin folder; push
 - [x] Hasil cek secret masuk ke jawaban AI tanpa pesan; terminal lebih responsif; push
+- [x] Tampilkan proses berpikir AI sebagai panel kecil; push ke GitHub
+- [ ] Cek status deploy Vercel (menunggu konfirmasi deploy jalan)
