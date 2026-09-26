@@ -20,7 +20,7 @@
 - [x] Terminal lebih ringan (koneksi sandbox di-cache, output per frame)
 - [x] Hasil terminal (mkdir/cp/script) tersinkron ke File Manager
 - [x] Animasi status AI menggantikan teks "Menyiapkan"
-- [ ] Kirim perubahan ke GitHub WenGPT (menunggu persetujuan)
+- [x] Kirim perubahan ke GitHub WenGPT
 - [x] Rapikan judul chat dan garis kotak pesan; pertahankan label batas file 20MB
 - [x] Periksa secret otomatis saat diterapkan dan hilangkan tombol uji
-- [ ] Periksa status deploy setelah perubahan
+- [x] Periksa status deploy setelah perubahan
