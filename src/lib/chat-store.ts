@@ -57,6 +57,7 @@ type State = {
   streamingIds: string[];
   attachments: SavedFile[];
   fileOps: Record<string, FileOp>;
+  folders: string[];
   read: ReadState;
 };
 
@@ -70,6 +71,7 @@ let state: State = {
   streamingIds: [],
   attachments: [],
   fileOps: {},
+  folders: [],
   read: EMPTY_READ,
 };
 const serverState: State = {
@@ -79,6 +81,7 @@ const serverState: State = {
   streamingIds: [],
   attachments: [],
   fileOps: {},
+  folders: [],
   read: EMPTY_READ,
 };
 const listeners = new Set<() => void>();
@@ -96,6 +99,7 @@ function save() {
       activeId: state.activeId,
       attachments: state.attachments,
       fileOps: state.fileOps,
+      folders: state.folders,
       read: state.read,
     }),
   );
@@ -123,6 +127,7 @@ export function bootChatStore() {
   let activeId: string | null = null;
   let attachments: SavedFile[] = [];
   let fileOps: Record<string, FileOp> = {};
+  let folders: string[] = [];
   let read: ReadState = EMPTY_READ;
   try {
     const stored = JSON.parse(localStorage.getItem(STORE) || "null") as {
@@ -130,12 +135,14 @@ export function bootChatStore() {
       activeId?: string;
       attachments?: SavedFile[];
       fileOps?: Record<string, FileOp>;
+      folders?: string[];
       read?: Partial<ReadState>;
     } | null;
     if (Array.isArray(stored?.sessions)) sessions = stored.sessions;
     if (typeof stored?.activeId === "string") activeId = stored.activeId;
     if (Array.isArray(stored?.attachments)) attachments = stored.attachments;
     if (stored?.fileOps && typeof stored.fileOps === "object") fileOps = stored.fileOps;
+    if (Array.isArray(stored?.folders)) folders = stored.folders.filter((f) => typeof f === "string");
     if (stored?.read)
       read = {
         files: stored.read.files ?? 0,
@@ -170,7 +177,7 @@ export function bootChatStore() {
   }
   if (sessions.length === 0) sessions = [newSession()];
   if (!activeId || !sessions.some((s) => s.id === activeId)) activeId = sessions[0]?.id ?? null;
-  state = { ...state, ready: true, sessions, activeId, attachments, fileOps, read };
+  state = { ...state, ready: true, sessions, activeId, attachments, fileOps, folders, read };
   save();
   emit();
 }
@@ -495,6 +502,8 @@ export async function sendMessage(
                 ],
           );
         } else if (event.t === "result") {
+          const dirs = (event["output"] as { dirs?: unknown } | undefined)?.dirs;
+          if (Array.isArray(dirs)) addFolders(dirs.filter((d): d is string => typeof d === "string"));
           patchAssistant(sessionId, assistant.id, (parts) =>
             parts.map((part) =>
               part.type === "tool" && part.run.id === event["id"]
@@ -620,10 +629,72 @@ export function fileExists(path: string) {
   return loadAllFiles().some((file) => file.path === path);
 }
 export function folderExists(path: string) {
-  return loadAllFiles().some((file) => file.path.startsWith(`${path}/`));
+  return (
+    state.folders.some((f) => f === path || f.startsWith(`${path}/`)) ||
+    loadAllFiles().some((file) => file.path.startsWith(`${path}/`))
+  );
+}
+export function listFolders() {
+  return state.folders;
+}
+export function addFolders(paths: string[]) {
+  const next = new Set(state.folders);
+  let changed = false;
+  for (const raw of paths) {
+    const path = raw.replace(/\/+$/, "");
+    if (!path.startsWith(`${SANDBOX_ROOT}/`) || /\/\./.test(path) || next.has(path)) continue;
+    next.add(path);
+    changed = true;
+  }
+  if (!changed) return;
+  state = { ...state, folders: [...next].sort() };
+  save();
+  emit();
+}
+function dropFolders(prefix: string, replaceWith?: string) {
+  const next = state.folders.flatMap((f) =>
+    f === prefix || f.startsWith(`${prefix}/`)
+      ? replaceWith
+        ? [`${replaceWith}${f.slice(prefix.length)}`]
+        : []
+      : [f],
+  );
+  state = { ...state, folders: [...new Set(next)].sort() };
+}
+export function createFolder(dir: string, folderName: string) {
+  const wanted = folderName.trim();
+  if (!isValidName(wanted)) throw new Error("Nama folder tidak valid.");
+  const path = `${dir}/${wanted}`;
+  if (folderExists(path)) throw new Error(`Folder “${wanted}” sudah ada.`);
+  addFolders([path]);
+  return path;
+}
+export function createTextFile(dir: string, fileName: string, content = "") {
+  const wanted = fileName.trim();
+  if (!isValidName(wanted)) throw new Error("Nama file tidak valid.");
+  const path = `${dir}/${wanted}`;
+  if (fileExists(path)) throw new Error(`“${wanted}” sudah ada di folder ini.`);
+  const file: SavedFile = {
+    path,
+    content,
+    runId: "manual",
+    ask: "Dibuat di File Manager",
+    failed: false,
+    updatedAt: Date.now(),
+    mediaType: "text/plain",
+    size: content.length,
+    key: crypto.randomUUID(),
+  };
+  state = { ...state, attachments: [file, ...state.attachments] };
+  save();
+  emit();
+  return file;
+}
+export function setSessionSandbox(sessionId: string, sandboxId: string) {
+  patchSession(sessionId, (current) => ({ ...current, sandboxId }));
 }
 export function folderPaths(): string[] {
-  const seen = new Set<string>();
+  const seen = new Set<string>(state.folders);
   for (const file of loadAllFiles()) {
     let dir = parentPath(file.path);
     while (dir.startsWith(`${SANDBOX_ROOT}/`)) {
@@ -658,9 +729,9 @@ export function removeFile(key: string) {
 
 export function removeFolder(prefix: string) {
   const targets = loadAllFiles().filter((file) => file.path.startsWith(`${prefix}/`));
-  if (!targets.length) return 0;
   const next = { ...state.fileOps };
   for (const file of targets) next[file.key ?? file.path] = { removed: true };
+  dropFolders(prefix);
   writeOps(next);
   return targets.length;
 }
@@ -700,7 +771,7 @@ function relocateFolder(prefix: string, target: string) {
     next[file.key ?? file.path] = { path: `${target}/${file.path.slice(prefix.length + 1)}` };
     moved += 1;
   }
-  if (!moved) throw new Error("Folder kosong atau sudah dipindahkan.");
+  dropFolders(prefix, target);
   writeOps(next);
   return moved;
 }

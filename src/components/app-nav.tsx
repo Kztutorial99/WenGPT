@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { FolderOpen, GitBranch, MessagesSquare } from "lucide-react";
+import { FolderOpen, GitBranch, MessagesSquare, SquareTerminal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { loadAllFiles, loadCheckpoints } from "@/lib/chat-store";
 import { useChatStore } from "@/lib/use-chat-store";
@@ -62,6 +62,11 @@ export function AppNav({ sessionId }: { sessionId: string }) {
       <Item title="File Manager" status={files} dot>
         <Link to="/chat/$sessionId/files" params={{ sessionId }}>
           <FolderOpen className="size-4" />
+        </Link>
+      </Item>
+      <Item title="Terminal" status={0}>
+        <Link to="/chat/$sessionId/terminal" params={{ sessionId }}>
+          <SquareTerminal className="size-4" />
         </Link>
       </Item>
       <Item title="Linimasa" status={steps} dot>

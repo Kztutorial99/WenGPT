@@ -128,11 +128,11 @@ function AttachmentButton() {
       <PromptInputButton
         tooltip="Lampirkan file (maks. 20 MB)"
         aria-label="Lampirkan file"
+        className="size-8 rounded-full bg-muted text-foreground hover:bg-accent"
         onClick={() => attachments.openFileDialog()}
       >
         <Paperclip className="size-4" />
       </PromptInputButton>
-      <span className="truncate text-[11px] text-muted-foreground">Maks. 20 MB</span>
     </PromptInputTools>
   );
 }
@@ -160,10 +160,7 @@ function Chat() {
       setUploadError(error instanceof Error ? error.message : "File gagal dilampirkan."),
     );
   };
-  const waiting =
-    streaming &&
-    last?.role === "assistant" &&
-    !last.parts.some((part) => part.type === "text" && part.text.trim());
+  const waiting = streaming && last?.role === "assistant" && last.parts.length === 0;
   const runningTool =
     streaming &&
     last?.role === "assistant" &&
@@ -181,7 +178,7 @@ function Chat() {
           <div className="min-w-0">
             <h1 className="truncate text-sm font-semibold">WenGPT</h1>
             <p className="truncate text-[11px] text-muted-foreground">
-              {streaming ? "Sedang mengerjakan…" : (session?.title ?? "Memuat sesi…")}
+              {session?.title ?? "Memuat sesi…"}
             </p>
           </div>
         </div>
@@ -258,15 +255,20 @@ function Chat() {
                       <ToolCard key={part.run.id} run={part.run} sessionId={sessionId} />
                     ),
                   )}
-                  {waiting && message.id === last?.id && !runningTool && (
-                    <Shimmer className="text-sm">WenGPT sedang berpikir…</Shimmer>
-                  )}
-                  {runningTool && message.id === last?.id && (
-                    <Shimmer className="mt-1 text-sm">Menjalankan langkah…</Shimmer>
-                  )}
                 </MessageContent>
               </Message>
             ))
+          )}
+          {(runningTool || waiting) && (
+            <div className="flex items-center gap-2 text-sm" role="status">
+              <span className="relative flex size-2">
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-60" />
+                <span className="relative inline-flex size-2 rounded-full bg-primary" />
+              </span>
+              <Shimmer className="text-sm">
+                {runningTool ? "Sedang mengerjakan…" : "Menyiapkan…"}
+              </Shimmer>
+            </div>
           )}
         </ConversationContent>
         <ConversationScrollButton

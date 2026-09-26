@@ -7,7 +7,9 @@ import {
   CopyPlus,
   Download,
   EllipsisVertical,
+  FilePlus,
   FileText,
+  FolderPlus,
   Folder,
   FolderInput,
   FolderOpen,
@@ -39,7 +41,10 @@ import {
 import { Input } from "@/components/ui/input";
 import {
   countUnder,
+  createFolder,
+  createTextFile,
   duplicateFile,
+  listFolders,
   folderPaths,
   isValidName,
   loadAllFiles,
@@ -304,7 +309,7 @@ function MoveDialog({
               className="flex w-full min-w-0 items-center gap-2 border-b border-border/50 px-3 py-2.5 text-left text-sm hover:bg-muted/40"
             >
               <FolderOpen className="size-4 shrink-0 text-primary" />
-              <span className="min-w-0 flex-1 truncate">Beranda</span>
+              <span className="min-w-0 flex-1 truncate font-mono text-xs">/files/home</span>
               {selected === ROOT ? <Check className="size-4 shrink-0 text-primary" /> : null}
             </button>
             {folders.map((folder) => (
@@ -409,7 +414,7 @@ type Hit = { file: SavedFile; rel: string; score: number; snippet: string };
 
 function FilesPage() {
   const { sessionId } = Route.useParams();
-  useChatStore();
+  const snapshot = useChatStore();
   const files = loadAllFiles();
   const [dir, setDir] = useState(ROOT);
   const [open, setOpen] = useState<string | null>(null);
@@ -493,6 +498,14 @@ function FilesPage() {
         if (top) folderSet.set(top, (folderSet.get(top) ?? 0) + 1);
       }
     }
+    const currentRel = dir === ROOT ? "" : dir.slice(ROOT.length + 1);
+    for (const folder of listFolders()) {
+      if (!folder.startsWith(`${ROOT}/`)) continue;
+      const rel = folder.slice(ROOT.length + 1);
+      if (currentRel && !rel.startsWith(`${currentRel}/`)) continue;
+      const top = rel.slice(currentRel ? currentRel.length + 1 : 0).split("/")[0];
+      if (top && !folderSet.has(top)) folderSet.set(top, 0);
+    }
     const folders = [...folderSet.entries()]
       .map(([folderName, count]) => ({
         name: folderName,
@@ -501,7 +514,7 @@ function FilesPage() {
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
     return { folders, dirFiles };
-  }, [files, dir]);
+  }, [files, dir, snapshot.folders]);
 
   const crumbs = useMemo(() => {
     const rel = dir === ROOT ? "" : dir.slice(ROOT.length + 1);
@@ -788,27 +801,71 @@ function FilesPage() {
           </>
         ) : (
           <>
-            <nav className="mb-3 flex min-w-0 items-center gap-1 overflow-x-auto text-xs text-muted-foreground">
+            <div className="mb-3 flex min-w-0 items-center gap-2">
+            <nav className="flex min-w-0 flex-1 items-center overflow-x-auto text-xs text-muted-foreground">
               <button
                 type="button"
                 onClick={() => setDir(ROOT)}
-                className={`shrink-0 rounded px-1.5 py-1 ${dir === ROOT ? "font-semibold text-foreground" : "hover:text-foreground"}`}
+                className={`shrink-0 rounded py-1 pl-1.5 font-mono ${dir === ROOT ? "font-semibold text-foreground" : "hover:text-foreground"}`}
               >
-                Beranda
+                /files/home
               </button>
               {crumbs.map((crumb, index) => (
-                <span key={crumb.path} className="flex shrink-0 items-center gap-1">
-                  <ChevronRight className="size-3 opacity-60" />
+                <span key={crumb.path} className="flex shrink-0 items-center">
                   <button
                     type="button"
                     onClick={() => setDir(crumb.path)}
-                    className={`rounded px-1.5 py-1 ${index === crumbs.length - 1 ? "font-semibold text-foreground" : "hover:text-foreground"}`}
+                    className={`rounded py-1 font-mono ${index === crumbs.length - 1 ? "font-semibold text-foreground" : "hover:text-foreground"}`}
                   >
-                    {crumb.label}
+                    /{crumb.label}
                   </button>
                 </span>
               ))}
             </nav>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" className="h-8 shrink-0 rounded-full px-3 text-xs">
+                  <FolderPlus className="size-3.5" />
+                  Baru
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-44 rounded-xl">
+                <DropdownMenuItem
+                  onSelect={() =>
+                    setNameTarget({
+                      title: "Folder baru",
+                      hint: dir.replace(ROOT, "/files/home"),
+                      value: "",
+                      submit: (value) => {
+                        createFolder(dir, value);
+                        toast.success(`Folder “${value.trim()}” dibuat.`);
+                      },
+                    })
+                  }
+                >
+                  <FolderPlus className="size-4" />
+                  Folder baru
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() =>
+                    setNameTarget({
+                      title: "File baru",
+                      hint: dir.replace(ROOT, "/files/home"),
+                      value: "",
+                      submit: (value) => {
+                        const file = createTextFile(dir, value);
+                        toast.success(`File “${value.trim()}” dibuat.`);
+                        setOpen(file.path);
+                      },
+                    })
+                  }
+                >
+                  <FilePlus className="size-4" />
+                  File baru
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            </div>
             {folders.length === 0 && dirFiles.length === 0 ? (
               <p className="py-20 text-center text-sm text-muted-foreground">
                 {dir === ROOT ? "Belum ada file." : "Folder ini kosong."}
@@ -822,7 +879,7 @@ function FilesPage() {
                         onClick={() => setDir(folder.path)}
                         icon={<Folder className="size-4 text-primary" />}
                         title={folder.name}
-                        meta={`${folder.count} file`}
+                        meta={folder.count ? `${folder.count} file` : "kosong"}
                         trailing={<ChevronRight className="size-4 shrink-0 text-muted-foreground" />}
                       />
                       <RowMenu label={folder.name} actions={folderActions(folder)} />
@@ -836,7 +893,7 @@ function FilesPage() {
                         onClick={() => setOpen(file.path)}
                         icon={<FileText className="size-4 text-primary" />}
                         title={name(file.path)}
-                        meta={file.size != null ? formatSize(file.size) : relOf(file.path)}
+                        meta={file.size != null ? formatSize(file.size) : undefined}
                       />
                       <RowMenu label={name(file.path)} actions={fileActions(file)} />
                     </div>

@@ -121,6 +121,18 @@ function chatError(message: string) {
   });
 }
 
+async function listDirs(sb: Sandbox): Promise<string[]> {
+  try {
+    const r = await sb.commands.run(
+      "find /home/user -mindepth 1 -maxdepth 4 -type d -not -path '*/.*' -not -path '*/node_modules*' -not -path '*/__pycache__*' -not -path '*/site-packages*' 2>/dev/null | head -200",
+      { timeoutMs: 10_000 },
+    );
+    return r.stdout.split("\n").map((l) => l.trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
@@ -232,6 +244,7 @@ export const Route = createFileRoute("/api/chat")({
                   exitCode: r.exitCode,
                   stdout: clip(r.stdout),
                   stderr: clip(r.stderr, 3000),
+                  dirs: await listDirs(sb),
                 };
               } catch (err: unknown) {
                 const e = err as {
