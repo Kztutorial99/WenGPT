@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { createOpenAI } from "@ai-sdk/openai";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { streamText, convertToModelMessages, tool, stepCountIs, type UIMessage } from "ai";
 import { z } from "zod";
 import { Sandbox } from "e2b";
@@ -36,7 +36,9 @@ Aturan:
 - JANGAN menulis isi pikiran, tag [thinking], atau "tool nama_tool:" sebagai teks. Panggil tool lewat mekanisme tool saja.
 - Untuk melihat secret yang tersimpan pakai list_secrets; untuk menguji apakah token benar dan aktif pakai test_secret. Nilai secret tidak pernah terlihat olehmu dan jangan pernah mencoba menampilkannya.
 - Secret tersedia sebagai environment variable di run_command (mis. $GITHUB_TOKEN). Jangan echo/print nilainya.
-- Folder kerja: /home/user. Jangan jalankan perintah yang berjalan selamanya (server) tanpa '&' di belakang.`;
+- Folder kerja SELALU /home/user. Semua file, script, dan folder baru WAJIB dibuat di dalam /home/user (contoh: /home/user/project/app.py). Jangan pakai /root, /tmp, /, ~ tanpa ekspansi, atau path lain kecuali pengguna memintanya secara eksplisit.
+- Selalu tulis path absolut lengkap (/home/user/...). Jika pengguna menyebut nama folder tanpa path, anggap berada di /home/user. Sebelum membuat file di subfolder, jalankan mkdir -p pada foldernya. Cek dengan ls bila ragu folder mana yang dimaksud.
+- Jangan jalankan perintah yang berjalan selamanya (server) tanpa '&' di belakang.`;
 
 
 // Model kadang menulis pemanggilan tool sebagai teks biasa. Saring sebelum dikirim ke layar.
@@ -267,7 +269,8 @@ export const Route = createFileRoute("/api/chat")({
             text,
           );
         const baseURL = await resolveAiBaseUrl();
-        const provider = createOpenAI({ apiKey, baseURL });
+        // openai-compatible membaca reasoning_content sehingga thinking benar-benar dialirkan.
+        const provider = createOpenAICompatible({ name: "openai", apiKey, baseURL: baseURL ?? "https://api.openai.com/v1" });
         const model = process.env["AI_MODEL"] || "gpt-4o-mini";
 
         const encoder = new TextEncoder();
@@ -369,7 +372,13 @@ export const Route = createFileRoute("/api/chat")({
             execute: async ({ path, content }) => {
               try {
                 const sb = await getSandbox();
-                const p = path.startsWith("/") ? path : `/home/user/${path}`;
+                const clean = path.trim().replace(/^~\/?/, "").replace(/^\.\//, "");
+                const p = clean.startsWith("/home/user")
+                  ? clean
+                  : clean.startsWith("/root/") || clean.startsWith("/tmp/") === false && clean.startsWith("/") === false
+                    ? `/home/user/${clean.replace(/^\/root\//, "")}`
+                    : clean;
+                await sb.commands.run(`mkdir -p "$(dirname '${p.replace(/'/g, "'\\''")}')"`, { cwd: "/home/user" }).catch(() => null);
                 await sb.files.write(p, content);
                 return { ok: true, path: p, bytes: content.length };
               } catch (err) {
@@ -452,7 +461,7 @@ export const Route = createFileRoute("/api/chat")({
         }
 
         const result = streamText({
-          model: provider.chat(model),
+          model: provider.chatModel(model),
           system: SYSTEM_PROMPT,
           messages: modelMessages,
           tools,
