@@ -45,14 +45,18 @@ export type SavedFile = {
   mediaType?: string;
   size?: number;
   truncated?: boolean;
+  key?: string;
 };
 type ReadState = { files: number; history: number; timelines: Record<string, number> };
+/** Perubahan path/penghapusan yang menimpa file hasil eksekusi maupun lampiran. */
+export type FileOp = { path?: string; removed?: boolean };
 type State = {
   ready: boolean;
   sessions: ChatSession[];
   activeId: string | null;
   streamingIds: string[];
   attachments: SavedFile[];
+  fileOps: Record<string, FileOp>;
   read: ReadState;
 };
 
@@ -65,6 +69,7 @@ let state: State = {
   activeId: null,
   streamingIds: [],
   attachments: [],
+  fileOps: {},
   read: EMPTY_READ,
 };
 const serverState: State = {
@@ -73,6 +78,7 @@ const serverState: State = {
   activeId: null,
   streamingIds: [],
   attachments: [],
+  fileOps: {},
   read: EMPTY_READ,
 };
 const listeners = new Set<() => void>();
@@ -89,6 +95,7 @@ function save() {
       sessions: state.sessions,
       activeId: state.activeId,
       attachments: state.attachments,
+      fileOps: state.fileOps,
       read: state.read,
     }),
   );
@@ -115,17 +122,20 @@ export function bootChatStore() {
   let sessions: ChatSession[] = [];
   let activeId: string | null = null;
   let attachments: SavedFile[] = [];
+  let fileOps: Record<string, FileOp> = {};
   let read: ReadState = EMPTY_READ;
   try {
     const stored = JSON.parse(localStorage.getItem(STORE) || "null") as {
       sessions?: ChatSession[];
       activeId?: string;
       attachments?: SavedFile[];
+      fileOps?: Record<string, FileOp>;
       read?: Partial<ReadState>;
     } | null;
     if (Array.isArray(stored?.sessions)) sessions = stored.sessions;
     if (typeof stored?.activeId === "string") activeId = stored.activeId;
     if (Array.isArray(stored?.attachments)) attachments = stored.attachments;
+    if (stored?.fileOps && typeof stored.fileOps === "object") fileOps = stored.fileOps;
     if (stored?.read)
       read = {
         files: stored.read.files ?? 0,
@@ -160,7 +170,7 @@ export function bootChatStore() {
   }
   if (sessions.length === 0) sessions = [newSession()];
   if (!activeId || !sessions.some((s) => s.id === activeId)) activeId = sessions[0]?.id ?? null;
-  state = { ...state, ready: true, sessions, activeId, attachments, read };
+  state = { ...state, ready: true, sessions, activeId, attachments, fileOps, read };
   save();
   emit();
 }
@@ -560,14 +570,177 @@ export function loadFiles(sessionId: string): SavedFile[] {
     }
   return [...map.values()].reverse();
 }
+const SANDBOX_ROOT = "/home/user";
+const NAME_MAX = 120;
+const baseName = (path: string) => path.split("/").pop() || path;
+const parentPath = (path: string) => path.split("/").slice(0, -1).join("/") || SANDBOX_ROOT;
+
+function keyOf(file: SavedFile) {
+  return file.key ?? file.path;
+}
+function applyOp(key: string, file: SavedFile): SavedFile | null {
+  const op = state.fileOps[key];
+  if (op?.removed) return null;
+  return { ...file, key, path: op?.path ?? file.path };
+}
+function writeOps(next: Record<string, FileOp>) {
+  state = { ...state, fileOps: next };
+  save();
+  emit();
+}
+
 export function loadAllFiles(): SavedFile[] {
   const map = new Map<string, SavedFile>();
-  for (const file of state.attachments) map.set(file.path, file);
+  const add = (key: string, file: SavedFile) => {
+    const applied = applyOp(key, file);
+    if (!applied) return;
+    const prev = map.get(applied.path);
+    if (!prev || prev.updatedAt < applied.updatedAt) map.set(applied.path, applied);
+  };
+  for (const file of state.attachments) add(keyOf(file), file);
   for (const session of state.sessions)
-    for (const file of loadFiles(session.id)) {
-      const prev = map.get(file.path);
-      if (!prev || prev.updatedAt < file.updatedAt)
-        map.set(file.path, { ...file, sessionId: session.id, sessionTitle: session.title });
-    }
+    for (const file of loadFiles(session.id))
+      add(`${session.id}:${file.runId}`, {
+        ...file,
+        sessionId: session.id,
+        sessionTitle: session.title,
+      });
   return [...map.values()].sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+/* ---------- aksi File Manager ---------- */
+
+export function isValidName(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed.length || trimmed.length > NAME_MAX) return false;
+  if (trimmed === "." || trimmed === "..") return false;
+  return !/[/\\\u0000-\u001f]/.test(trimmed);
+}
+export function fileExists(path: string) {
+  return loadAllFiles().some((file) => file.path === path);
+}
+export function folderExists(path: string) {
+  return loadAllFiles().some((file) => file.path.startsWith(`${path}/`));
+}
+export function folderPaths(): string[] {
+  const seen = new Set<string>();
+  for (const file of loadAllFiles()) {
+    let dir = parentPath(file.path);
+    while (dir.startsWith(`${SANDBOX_ROOT}/`)) {
+      seen.add(dir);
+      dir = parentPath(dir);
+    }
+  }
+  return [...seen].sort((a, b) => a.localeCompare(b));
+}
+export function countUnder(prefix: string) {
+  return loadAllFiles().filter((file) => file.path.startsWith(`${prefix}/`)).length;
+}
+function fileByKey(key: string) {
+  return loadAllFiles().find((file) => file.key === key);
+}
+function copyNameIn(dir: string, base: string) {
+  const dot = base.lastIndexOf(".");
+  const stem = dot > 0 ? base.slice(0, dot) : base;
+  const ext = dot > 0 ? base.slice(dot) : "";
+  for (let i = 1; i < 60; i += 1) {
+    const candidate = `${stem}${i === 1 ? "-salinan" : `-salinan-${i}`}${ext}`;
+    if (!fileExists(`${dir}/${candidate}`)) return candidate;
+  }
+  return `${stem}-salinan-${Date.now()}${ext}`;
+}
+
+export function removeFile(key: string) {
+  if (!fileByKey(key)) return 0;
+  writeOps({ ...state.fileOps, [key]: { removed: true } });
+  return 1;
+}
+
+export function removeFolder(prefix: string) {
+  const targets = loadAllFiles().filter((file) => file.path.startsWith(`${prefix}/`));
+  if (!targets.length) return 0;
+  const next = { ...state.fileOps };
+  for (const file of targets) next[file.key ?? file.path] = { removed: true };
+  writeOps(next);
+  return targets.length;
+}
+
+export function renameFile(key: string, newName: string) {
+  const file = fileByKey(key);
+  if (!file) throw new Error("File tidak ditemukan.");
+  const wanted = newName.trim();
+  if (!isValidName(wanted)) throw new Error("Nama tidak boleh kosong atau memakai tanda /.");
+  const path = `${parentPath(file.path)}/${wanted}`;
+  if (path === file.path) return file;
+  if (fileExists(path)) throw new Error(`“${wanted}” sudah ada di folder ini.`);
+  writeOps({ ...state.fileOps, [key]: { path } });
+  return { ...file, path };
+}
+
+export function moveFile(key: string, dir: string) {
+  const file = fileByKey(key);
+  if (!file) throw new Error("File tidak ditemukan.");
+  const path = `${dir}/${baseName(file.path)}`;
+  if (path === file.path) return file;
+  if (fileExists(path)) throw new Error(`“${baseName(file.path)}” sudah ada di folder itu.`);
+  writeOps({ ...state.fileOps, [key]: { path } });
+  return { ...file, path };
+}
+
+function relocateFolder(prefix: string, target: string) {
+  if (!isValidName(baseName(target))) throw new Error("Nama folder tidak valid.");
+  if (target === prefix) return countUnder(prefix);
+  if (target.startsWith(`${prefix}/`))
+    throw new Error("Folder tidak bisa dipindahkan ke dalam dirinya sendiri.");
+  if (folderExists(target)) throw new Error(`“${baseName(target)}” sudah berisi file.`);
+  const next = { ...state.fileOps };
+  let moved = 0;
+  for (const file of loadAllFiles()) {
+    if (!file.path.startsWith(`${prefix}/`)) continue;
+    next[file.key ?? file.path] = { path: `${target}/${file.path.slice(prefix.length + 1)}` };
+    moved += 1;
+  }
+  if (!moved) throw new Error("Folder kosong atau sudah dipindahkan.");
+  writeOps(next);
+  return moved;
+}
+export function renameFolder(prefix: string, newName: string) {
+  return relocateFolder(prefix, `${parentPath(prefix)}/${newName.trim()}`);
+}
+export function moveFolder(prefix: string, dir: string) {
+  return relocateFolder(prefix, `${dir}/${baseName(prefix)}`);
+}
+
+export async function duplicateFile(key: string, targetName?: string) {
+  const file = fileByKey(key);
+  if (!file) throw new Error("File tidak ditemukan.");
+  const dir = parentPath(file.path);
+  const wanted = (targetName ?? copyNameIn(dir, baseName(file.path))).trim();
+  if (!isValidName(wanted)) throw new Error("Nama salinan tidak valid.");
+  const path = `${dir}/${wanted}`;
+  if (fileExists(path)) throw new Error(`“${wanted}” sudah ada di folder ini.`);
+  let attachmentId: string | undefined;
+  if (file.attachmentId) {
+    const { loadAttachment, saveAttachment } = await import("./attachment-store");
+    const blob = await loadAttachment(file.attachmentId);
+    if (!blob) throw new Error("Isi file asli tidak bisa dibaca.");
+    attachmentId = crypto.randomUUID();
+    await saveAttachment(attachmentId, blob);
+  }
+  const copy: SavedFile = {
+    ...file,
+    path,
+    ask: "Salinan file",
+    failed: false,
+    updatedAt: Date.now(),
+  };
+  delete copy.key;
+  delete copy.sessionId;
+  delete copy.sessionTitle;
+  if (attachmentId) copy.attachmentId = attachmentId;
+  copy.key = crypto.randomUUID();
+  state = { ...state, attachments: [copy, ...state.attachments] };
+  save();
+  emit();
+  return copy;
 }

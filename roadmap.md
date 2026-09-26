@@ -11,4 +11,6 @@
 - [ ] Rapikan status proses, scroll selesai, dan perilaku fokus chat
 - [ ] Ganti badge menu dengan indikator konten baru yang bisa dibaca
 - [ ] Tambahkan lampiran file 20 MB ke attached_assets dan File Manager
+- [x] Pencarian file, folder, dan isi file di File Manager
+- [ ] Aksi file di File Manager: hapus, ganti nama, salin, pindah folder
 - [ ] Validasi alur chat dan unggah file pada ponsel dan desktop
