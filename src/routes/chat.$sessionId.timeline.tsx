@@ -92,6 +92,8 @@ function Timeline() {
   const entries = current?.entries ?? [];
   const done = useMemo(() => runs.filter((run) => run.output).length, [runs]);
   const active = streaming && current?.id === checkpoints.at(-1)?.id;
+  const cancelled = current?.messageIds.some((id) => snapshot.sessions.find((s) => s.id === sessionId)?.messages.find((m) => m.id === id)?.parts.some((p) => p.type === "cancelled"));
+  const pending = runs.some((run) => !run.output);
   return (
     <main className="h-dvh min-w-0 overflow-y-auto overscroll-contain bg-background text-foreground">
       <header className="sticky top-0 z-20 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-border/60 bg-background/88 px-4 py-3 backdrop-blur-xl sm:px-6">
@@ -139,7 +141,10 @@ function Timeline() {
                 )
               ))}
             </ol>
-            {active && <p role="status" className="ml-6 flex items-center gap-2 text-xs text-muted-foreground"><span className="size-1.5 animate-pulse rounded-full bg-primary" />Proses masih berjalan…</p>}
+            <p role="status" className={`ml-6 flex items-center gap-2 border-l-2 py-1 pl-4 text-xs font-medium ${active || pending ? "border-primary text-muted-foreground" : cancelled ? "border-destructive text-destructive" : "border-success text-success"}`}>
+              {active || pending ? <span className="size-2 animate-pulse rounded-full bg-primary" /> : cancelled ? <CircleAlert className="size-4" /> : <Check className="size-4" />}
+              {active ? "Proses masih berjalan…" : pending ? "Ada langkah yang belum selesai" : cancelled ? "Proses dibatalkan" : "Linimasa selesai"}
+            </p>
           </>
         )}
       </section>
@@ -204,6 +209,7 @@ function ThinkingItem({ entry, number, active }: { entry: Extract<TimelineEntry,
   );
 }
 function WebItem({ run, number }: { run: ToolRun; number: number }) {
+  const [expanded, setExpanded] = useState(false);
   const output = run.output;
   const search = run.name === "web_search";
   const failed = !!output && output.ok === false;
@@ -225,21 +231,26 @@ function WebItem({ run, number }: { run: ToolRun; number: number }) {
         <span className="min-w-0 truncate">{search ? run.input.query : run.input.url}</span>
       </div>
       {search && !!output?.results?.length && (
-        <ul className="mt-2 grid gap-1.5">
-          {output.results.map((r) => (
-            <li key={r.url}>
-              <a href={r.url} target="_blank" rel="noreferrer" className="block min-w-0 rounded-md border border-border/50 bg-card/50 px-3 py-2 hover:border-primary/50">
-                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                  <img src={`https://www.google.com/s2/favicons?domain=${r.site}&sz=32`} alt="" className="size-3.5 rounded-sm" loading="lazy" />
-                  <span className="truncate">{r.site}</span>
+         <ul className="mt-2 grid gap-1.5 sm:grid-cols-2">
+           {output.results.slice(0, expanded ? undefined : 3).map((r) => (
+             <li key={r.url} className="min-w-0">
+               <a href={r.url} target="_blank" rel="noreferrer" className="block min-w-0 overflow-hidden rounded-md border border-border/50 bg-card/50 px-2.5 py-2 hover:border-primary/50">
+                 <div className="flex min-w-0 items-center gap-1.5 text-[10px] text-muted-foreground">
+                   <Globe className="size-3 shrink-0" />
+                   <span className="min-w-0 truncate">{r.site}</span>
                 </div>
-                <p className="mt-1 truncate text-xs font-medium">{r.title}</p>
-                <p className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-muted-foreground">{r.snippet}</p>
+                 <p className="mt-1 line-clamp-2 break-words text-xs font-medium leading-4">{r.title}</p>
+                 <p className="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground">{r.snippet}</p>
               </a>
             </li>
           ))}
         </ul>
       )}
+       {search && (output?.results?.length ?? 0) > 3 && (
+         <Button variant="ghost" size="sm" className="mt-1 h-7 px-2 text-xs text-muted-foreground" onClick={() => setExpanded((value) => !value)}>
+           {expanded ? "Tampilkan lebih sedikit" : `Lihat ${((output?.results?.length ?? 0) - 3)} hasil lainnya`}
+         </Button>
+       )}
       {!search && output?.title && <p className="mt-1.5 truncate text-[11px] text-muted-foreground">{output.title}</p>}
       {failed && output?.error && <p className="mt-1.5 text-[11px] text-destructive">{output.error}</p>}
     </li>

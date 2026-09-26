@@ -15,3 +15,4 @@
 - Active chat streams live in the module-level chat store so internal route navigation does not cancel the in-flight request.
 - Uploaded attachment blobs live in IndexedDB while browser-local chat metadata keeps only safe previews and references, because 20 MB files exceed localStorage capacity.
 - Keep AI reasoning and execution details in per-turn timeline entries, with one compact chat link and completed answer text only, so the conversation remains readable during long runs.
+- Supply current Makassar date per chat request and use Bing RSS with Google News RSS fallback for web search, because static dates and Bing-only results become stale or empty.

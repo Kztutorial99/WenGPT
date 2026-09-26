@@ -11,7 +11,10 @@ Kamu bisa ngobrol biasa, menjelaskan, menulis kode, dan menjawab pertanyaan apa 
 Kamu juga punya sandbox Linux (Ubuntu, Python 3, Node.js, pip, npm tersedia, akses internet) lewat tool:
 - run_command: jalankan perintah shell (install package, jalankan script, cek hasil).
 - web_search: cari info terbaru di internet. Hasil langsung kembali ke kamu (JANGAN simpan hasil pencarian ke file, JANGAN pakai curl/run_command untuk mencari). Pakai OTOMATIS setiap kali pengguna minta cari/cek di web, atau pertanyaan butuh info terkini (berita, harga, versi terbaru, jadwal, cuaca, orang/produk/peristiwa yang mungkin berubah).
-- read_webpage: baca isi teks sebuah URL (misal dari hasil web_search) bila snippet belum cukup.
+- read_webpage: baca isi teks sebuah URL (misal dari hasil web_search) hanya bila cuplikan belum cukup; situs tertentu memblokir pembacaan otomatis.
+- Tanggal terkini diberikan oleh sistem pada setiap pesan. Untuk info terbaru, gunakan tahun/tanggal itu dalam pencarian; jangan menganggap tahun pada hasil lama sebagai versi terbaru. Utamakan sumber resmi dan tanggal publikasi. Jangan menyatakan versi terbaru bila sumber tidak mencantumkan nomor versinya.
+- Jika suatu situs menolak akses baca otomatis, jangan ulangi URL yang sama; gunakan cuplikan hasil pencarian atau sumber resmi lain. Jangan mengarang isi halaman yang ditolak.
+- Kamu bisa melihat gambar/screenshot yang dilampirkan pengguna; video dikirim sebagai beberapa frame berurutan. Analisis isi visualnya langsung (teks, error, UI, objek, kejadian) tanpa membuka file lewat sandbox.
 Cukup 1-2 kali web_search dengan query berbeda; jika tetap kosong jangan ulang terus, langsung jawab dengan info yang ada. Setelah memakai web_search, jawab ringkas dan rapi, lalu cantumkan sumber sebagai link markdown [judul](url).
 - write_file: tulis file ke sandbox. File yang ditulis dengan write_file otomatis muncul di menu File Manager pengguna.
 
@@ -227,19 +230,30 @@ const hit = (title: string, url: string, snippet: string): WebHit | null => {
   try { site = new URL(url).hostname.replace(/^www\./, ""); } catch { return null; }
   return { title: decodeHtml(title).slice(0, 160), url, snippet: decodeHtml(snippet).slice(0, 320), site };
 };
+function relevantHit(result: WebHit, query: string) {
+  const terms = [...new Set(query.toLowerCase().match(/[\p{L}\p{N}]{4,}/gu) ?? [])]
+    .filter((word) => !/^(latest|newest|current|recent|update|version|terbaru|terkini|versi|pembaruan|history|sejarah|tahun|20\d{2})$/.test(word));
+  if (!terms.length) return true;
+  const title = result.title.toLowerCase();
+  return terms.filter((word) => title.includes(word)).length >= Math.min(2, terms.length);
+}
 // Cadangan berita: Google News RSS (buka lewat server, formatnya stabil).
 async function searchGoogleNews(query: string, max: number) {
   const res = await fetch(
     `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&safe=off&hl=id&gl=ID&ceid=ID:id`,
     { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(8_000) },
   );
+  if (!res.ok) throw new Error(`Google News ${res.status}`);
   const xml = await res.text();
   const out: WebHit[] = [];
+  const currentYear = new Date().getUTCFullYear();
   for (const item of xml.match(/<item>[\s\S]*?<\/item>/g) ?? []) {
     const g = (tag: string) => decodeHtml(item.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`))?.[1] ?? "");
     const url = g("link").replace(/&amp;/g, "&");
     const source = item.match(/<source[^>]*>([\s\S]*?)<\/source>/)?.[1] ?? "";
-    const h = hit(g("title"), url, `${source ? `${source} · ` : ""}${g("pubDate")}`);
+    const published = Date.parse(g("pubDate"));
+    if (!Number.isFinite(published) || new Date(published).getUTCFullYear() < currentYear - 1) continue;
+    const h = hit(g("title"), url, `${source ? `${decodeHtml(source)} · ` : ""}${new Date(published).toLocaleDateString("id-ID", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" })}`);
     if (h) out.push(h);
     if (out.length >= max) break;
   }
@@ -260,39 +274,23 @@ async function searchBing(query: string, max: number) {
   }
   return out;
 }
-async function searchTavily(query: string, max: number) {
-  const apiKey = process.env["TAVILY_API_KEY"];
-  if (!apiKey) return [] as WebHit[];
-  const res = await fetch("https://api.tavily.com/search", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      api_key: apiKey,
-      query,
-      max_results: max,
-      search_depth: "basic",
-      include_answer: false,
-    }),
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (!res.ok) throw new Error(`tavily ${res.status}`);
-  const data = (await res.json()) as { results?: { title?: string; url?: string; content?: string }[] };
-  const out: WebHit[] = [];
-  for (const r of data.results ?? []) {
-    const h = hit(r.title ?? "", r.url ?? "", r.content ?? "");
-    if (h) out.push(h);
-    if (out.length >= max) break;
-  }
-  return out;
-}
 const searchCache = new Map<string, { at: number; results: WebHit[] }>();
 async function webSearch(query: string, max = 6) {
-  const key = query.trim().toLowerCase();
+  const year = new Date().getUTCFullYear();
+  const recent = /\b(latest|newest|current|recent|update|version|terbaru|terkini|versi|pembaruan)\b/i.test(query);
+  // Models sometimes carry a stale year from their training data into a "latest" search.
+  const freshQuery = recent
+    ? `${query.replace(/\b20\d{2}\b/g, (value) => Number(value) < year ? String(year) : value).trim()}${/\b20\d{2}\b/.test(query) ? "" : ` ${year}`}`
+    : query;
+  const key = freshQuery.trim().toLowerCase();
   const cached = searchCache.get(key);
   if (cached && Date.now() - cached.at < 10 * 60_000) return cached.results;
-  // Utama: Tavily (API resmi, stabil dari server). Cadangan: Bing RSS.
-  const engines = [searchTavily, searchBing].map((fn) =>
-    fn(query, max).then((r) => (r.length ? r : Promise.reject(new Error("kosong")))),
+  // Bing RSS can return an empty feed from hosted servers. News is an actual fallback, not just a declared one.
+  const engines = [searchBing, searchGoogleNews].map((fn) =>
+    fn(freshQuery, max).then((r) => {
+      const relevant = r.filter((result) => relevantHit(result, freshQuery));
+      return relevant.length ? relevant : Promise.reject(new Error("hasil tidak relevan"));
+    }),
   );
   const results = await Promise.any(engines).catch(() => [] as WebHit[]);
   if (results.length) searchCache.set(key, { at: Date.now(), results });
@@ -300,8 +298,11 @@ async function webSearch(query: string, max = 6) {
 }
 async function readWebpage(url: string) {
   const res = await fetch(url, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(12_000), redirect: "follow" });
+  if (!res.ok) return { ok: false, url: res.url || url, error: `Situs membatasi pembacaan otomatis (${res.status}). Gunakan cuplikan pencarian atau sumber lain.` };
   const html = await res.text();
   const title = decodeHtml(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "");
+  if (/attention required|just a moment|access denied|captcha/i.test(title))
+    return { ok: false, url: res.url || url, error: "Situs membatasi pembacaan otomatis. Gunakan cuplikan pencarian atau sumber lain." };
   const body = html
     .replace(/<(script|style|noscript|svg|nav|footer|header)[\s\S]*?<\/\1>/gi, " ")
     .replace(/<\/(p|div|li|h[1-6]|br|tr)>/gi, "\n");
@@ -369,6 +370,7 @@ export const Route = createFileRoute("/api/chat")({
         // openai-compatible membaca reasoning_content sehingga thinking benar-benar dialirkan.
         const provider = createOpenAICompatible({ name: "openai", apiKey, baseURL: baseURL ?? "https://api.openai.com/v1" });
         const model = process.env["AI_MODEL"] || "gpt-4o-mini";
+        const today = new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Makassar", weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date());
 
         const encoder = new TextEncoder();
         let controllerRef: ReadableStreamDefaultController<Uint8Array> | null = null;
@@ -426,15 +428,15 @@ export const Route = createFileRoute("/api/chat")({
 
         let searchCalls = 0;
         const tools = {
-          web_search: tool({
-            description: "Cari informasi terbaru di internet. Hasil (judul, url, snippet) langsung dikembalikan, tidak disimpan ke file.",
+           web_search: tool({
+             description: `Cari informasi terbaru di internet. Tanggal hari ini ${today} (Makassar). Pakai tahun berjalan untuk info terbaru. Hasil langsung dikembalikan tanpa file.`,
             inputSchema: z.object({ query: z.string().min(1).describe("Kata kunci pencarian yang spesifik") }),
             execute: async ({ query }) => {
               searchCalls += 1;
               if (searchCalls > 4) return { ok: false, query, results: [], detail: "Batas pencarian tercapai. Jawab sekarang dengan info yang sudah ada." };
               try {
-                const results = await webSearch(query);
-                return { ok: results.length > 0, query, results, ...(results.length ? {} : { detail: "Tidak ada hasil." }) };
+                 const results = await webSearch(query);
+                 return { ok: results.length > 0, query, results, ...(results.length ? {} : { detail: "Tidak ada hasil dari sumber yang tersedia. Jangan mengulang pencarian yang sama; jelaskan keterbatasannya." }) };
               } catch (err) {
                 return { ok: false, query, results: [], error: err instanceof Error ? err.message : String(err) };
               }
@@ -575,17 +577,45 @@ export const Route = createFileRoute("/api/chat")({
             lastText,
           );
         const modelMessages = await convertToModelMessages(body.messages);
-        if (!needsThink) {
-          const last = modelMessages.at(-1);
-          if (last?.role === "user") {
-            if (typeof last.content === "string") last.content += " /no_think";
-            else last.content.push({ type: "text", text: "/no_think" });
+        // Lampiran gambar/video dikirim ke model sebagai input visual, bukan hanya disalin ke sandbox.
+        const visual: { type: "image"; image: string; mediaType: string }[] = [];
+        const visualNotes: string[] = [];
+        for (const file of attachmentResult.data) {
+          if (file.mediaType.startsWith("image/") && !/svg/.test(file.mediaType)) {
+            visual.push({ type: "image", image: file.dataUrl, mediaType: file.mediaType });
+          } else if (file.mediaType.startsWith("video/")) {
+            try {
+              const sb = await getSandbox();
+              const dir = `/tmp/frames_${Date.now()}`;
+              const q = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
+              await sb.commands.run(
+                `mkdir -p ${dir} && (command -v ffmpeg >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg) >/dev/null 2>&1) && ` +
+                  `D=$(ffprobe -v error -show_entries format=duration -of csv=p=0 ${q(file.path)} | cut -d. -f1); D=\${D:-6}; [ "$D" -lt 1 ] && D=1; ` +
+                  `ffmpeg -loglevel error -i ${q(file.path)} -vf "fps=6/$D,scale=768:-2" -frames:v 6 ${dir}/f_%02d.jpg`,
+                { timeoutMs: 120_000 },
+              );
+              const list = (await sb.files.list(dir)).map((f) => f.name).filter((n) => n.endsWith(".jpg")).sort();
+              for (const name of list) {
+                const bytes = await sb.files.read(`${dir}/${name}`, { format: "bytes" });
+                visual.push({ type: "image", image: `data:image/jpeg;base64,${Buffer.from(bytes).toString("base64")}`, mediaType: "image/jpeg" });
+              }
+              visualNotes.push(`Video ${file.path} dilampirkan sebagai ${list.length} cuplikan frame berurutan.`);
+            } catch {
+              visualNotes.push(`Video ${file.path} gagal diambil frame-nya; beri tahu pengguna bila perlu.`);
+            }
           }
+        }
+        const last = modelMessages.at(-1);
+        if (last?.role === "user") {
+          if (typeof last.content === "string") last.content = [{ type: "text", text: last.content }];
+          if (visual.length) last.content.push(...visual);
+          if (visualNotes.length) last.content.push({ type: "text", text: visualNotes.join("\n") });
+          if (!needsThink) last.content.push({ type: "text", text: "/no_think" });
         }
 
         const result = streamText({
           model: provider.chatModel(model),
-          system: SYSTEM_PROMPT,
+           system: `${SYSTEM_PROMPT}\n\nTanggal saat ini (waktu Makassar, UTC+8): ${today}. Untuk permintaan info terbaru, cari dengan tahun berjalan dan cek tanggal sumber sebelum menjawab.`,
           messages: modelMessages,
           tools,
           stopWhen: stepCountIs(24),
