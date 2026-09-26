@@ -56,6 +56,7 @@ import {
   removeFolder,
   renameFile,
   renameFolder,
+  syncSandboxFiles,
   type SavedFile,
 } from "@/lib/chat-store";
 import { loadAttachment } from "@/lib/attachment-store";
@@ -433,6 +434,13 @@ function FilesPage() {
       setDir(path.split("/").slice(0, -1).join("/") || ROOT);
     }
   }, []);
+
+  useEffect(() => {
+    if (!snapshot.ready) return;
+    void syncSandboxFiles(sessionId);
+    const timer = window.setInterval(() => void syncSandboxFiles(sessionId), 8000);
+    return () => window.clearInterval(timer);
+  }, [snapshot.ready, sessionId]);
 
   const q = query.trim();
   const searching = q.length > 0;

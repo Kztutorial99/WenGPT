@@ -1,3 +1,4 @@
+import { loadSecrets, secretPayload } from "./secret-store";
 export type ToolOut = {
   exitCode?: number;
   stdout?: string;
@@ -6,11 +7,24 @@ export type ToolOut = {
   error?: string;
   path?: string;
   bytes?: number;
+  status?: string;
+  account?: string;
+  detail?: string;
+  requested?: boolean;
+  name?: string;
+  service?: string;
 };
 export type ToolRun = {
   id: string;
   name: string;
-  input: { command?: string; path?: string; content?: string };
+  input: {
+    command?: string;
+    path?: string;
+    content?: string;
+    name?: string;
+    service?: string;
+    reason?: string;
+  };
   output?: ToolOut;
   startedAt: number;
   finishedAt?: number;
@@ -380,6 +394,7 @@ export async function sendMessage(
   const prompt = raw.trim();
   const session = getSession(sessionId);
   if ((!prompt && !incoming.length) || !session || isStreaming(sessionId)) return;
+  await loadSecrets();
   const newlyAttached = await persistAttachments(session, incoming);
   const attachmentNote = newlyAttached.length
     ? `\n\n[Lampiran pengguna]\n${newlyAttached.map((file) => `- ${file.path.replace("/home/user/", "")} (${file.mediaType}, ${file.size} byte)${file.content ? `\n  Cuplikan isi:\n${file.content}` : "\n  File biner tersedia di sandbox untuk diperiksa dengan tool."}`).join("\n")}`
@@ -419,10 +434,11 @@ export async function sendMessage(
         sessionId,
         sandboxId: session.sandboxId,
         files: loadAllFiles()
-          .filter((file) => !file.failed && !file.attachmentId)
+          .filter((file) => !file.failed && !file.attachmentId && !file.truncated)
           .slice(0, 40)
           .map(({ path, content }) => ({ path, content })),
-        attachments: await attachmentPayload(state.attachments.slice(0, 10)),
+        secrets: secretPayload(),
+        attachments: await attachmentPayload(state.attachments.filter((f) => f.attachmentId).slice(0, 10)),
         messages: history.slice(-16).map((message) => ({
           id: message.id,
           role: message.role,
@@ -504,6 +520,7 @@ export async function sendMessage(
         } else if (event.t === "result") {
           const dirs = (event["output"] as { dirs?: unknown } | undefined)?.dirs;
           if (Array.isArray(dirs)) addFolders(dirs.filter((d): d is string => typeof d === "string"));
+          if (dirs) void syncSandboxFiles(sessionId);
           patchAssistant(sessionId, assistant.id, (parts) =>
             parts.map((part) =>
               part.type === "tool" && part.run.id === event["id"]
@@ -814,4 +831,63 @@ export async function duplicateFile(key: string, targetName?: string) {
   save();
   emit();
   return copy;
+}
+
+/* ---------- sinkronisasi sandbox → File Manager ---------- */
+
+const syncing = new Map<string, Promise<void>>();
+/** Ambil isi /home/user dari sandbox sesi supaya hasil terminal (mkdir, cp, dll) muncul di File Manager. */
+export function syncSandboxFiles(sessionId: string) {
+  const sandboxId = getSession(sessionId)?.sandboxId;
+  if (!sandboxId || typeof window === "undefined") return Promise.resolve();
+  const running = syncing.get(sandboxId);
+  if (running) return running;
+  const job = (async () => {
+    try {
+      const res = await fetch("/api/sandbox-files", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sandboxId }),
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        dirs?: string[];
+        files?: { path: string; size: number; content: string; binary: boolean; mtime: number }[];
+      };
+      if (!Array.isArray(data.files)) return;
+      const title = getSession(sessionId)?.title;
+      const prev = new Map(state.attachments.filter((f) => f.key?.startsWith("sb:")).map((f) => [f.path, f]));
+      const synced: SavedFile[] = data.files
+        .filter((f) => !f.path.startsWith(`${SANDBOX_ROOT}/attached_assets/`))
+        .map((f) => {
+          const old = prev.get(f.path);
+          const same = old && old.content === f.content && old.size === f.size;
+          return {
+            path: f.path,
+            content: f.content,
+            runId: "sandbox",
+            ask: "Dibuat lewat terminal / perintah",
+            failed: false,
+            updatedAt: same ? old.updatedAt : Math.max(f.mtime || 0, Date.now() - 1000),
+            sessionId,
+            ...(title ? { sessionTitle: title } : {}),
+            mediaType: f.binary ? "application/octet-stream" : "text/plain",
+            size: f.size,
+            ...(f.binary ? { truncated: true } : {}),
+            key: `sb:${f.path}`,
+          };
+        });
+      const others = state.attachments.filter((f) => !f.key?.startsWith("sb:"));
+      state = { ...state, attachments: [...synced, ...others] };
+      save();
+      emit();
+      if (Array.isArray(data.dirs)) addFolders(data.dirs);
+    } catch {
+      /* sandbox offline: abaikan */
+    } finally {
+      syncing.delete(sandboxId);
+    }
+  })();
+  syncing.set(sandboxId, job);
+  return job;
 }

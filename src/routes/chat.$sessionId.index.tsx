@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Bot, ChevronRight, FileText, Paperclip, Plus, Terminal, X } from "lucide-react";
 import { AppNav } from "@/components/app-nav";
+import { AiDots, SecretRequestCard, SecretResultCard } from "@/components/secret-cards";
 import {
   Conversation,
   ConversationContent,
@@ -63,6 +64,8 @@ function duration(ms?: number) {
       : `${(ms / 1000).toFixed(ms < 10000 ? 1 : 0)} dtk`;
 }
 function ToolCard({ run, sessionId }: { run: ToolRun; sessionId: string }) {
+  if (run.name === "request_secret") return <SecretRequestCard run={run} />;
+  if (run.name === "list_secrets" || run.name === "test_secret") return <SecretResultCard run={run} />;
   const failed = !!run.output && ((run.output.exitCode ?? 0) !== 0 || run.output.ok === false);
   const command = run.name === "run_command";
   return (
@@ -79,15 +82,17 @@ function ToolCard({ run, sessionId }: { run: ToolRun; sessionId: string }) {
       )}
       <span className="min-w-0 flex-1 truncate font-mono text-xs">
         {(command ? run.input.command : run.input.path) ||
-          (command ? "Menyiapkan perintah…" : "Menyusun isi file…")}
+          (command ? <AiDots /> : "Menyusun isi file…")}
       </span>
       <span
         className={`shrink-0 text-[11px] ${failed ? "text-destructive" : run.output ? "text-success" : "text-muted-foreground"}`}
       >
         {!run.output ? (
-          <Shimmer className="text-[11px]">
-            {command ? (run.input.command ? "Menjalankan…" : "Menyiapkan…") : "Menulis file…"}
-          </Shimmer>
+          command && !run.input.command ? (
+            <AiDots />
+          ) : (
+            <Shimmer className="text-[11px]">{command ? "Menjalankan…" : "Menulis file…"}</Shimmer>
+          )
         ) : failed ? (
           "Gagal"
         ) : (
@@ -126,7 +131,6 @@ function AttachmentButton() {
   return (
     <PromptInputTools>
       <PromptInputButton
-        tooltip="Lampirkan file (maks. 20 MB)"
         aria-label="Lampirkan file"
         className="size-8 rounded-full bg-muted text-foreground hover:bg-accent"
         onClick={() => attachments.openFileDialog()}
@@ -175,12 +179,7 @@ function Chat() {
           <span className="brand-mark">
             <Bot className="size-4" />
           </span>
-          <div className="min-w-0">
-            <h1 className="truncate text-sm font-semibold">WenGPT</h1>
-            <p className="truncate text-[11px] text-muted-foreground">
-              {session?.title ?? "Memuat sesi…"}
-            </p>
-          </div>
+          <h1 className="truncate text-sm font-semibold">WenGPT</h1>
         </div>
         <div className="flex items-center">
           <AppNav sessionId={sessionId} />
@@ -260,14 +259,13 @@ function Chat() {
             ))
           )}
           {(runningTool || waiting) && (
-            <div className="flex items-center gap-2 text-sm" role="status">
-              <span className="relative flex size-2">
-                <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-60" />
-                <span className="relative inline-flex size-2 rounded-full bg-primary" />
-              </span>
-              <Shimmer className="text-sm">
-                {runningTool ? "Sedang mengerjakan…" : "Menyiapkan…"}
-              </Shimmer>
+            <div className="flex items-center gap-2.5 text-sm" role="status">
+              <span className="ai-orb" aria-hidden />
+              {runningTool ? (
+                <Shimmer className="text-sm">Sedang mengerjakan…</Shimmer>
+              ) : (
+                <AiDots />
+              )}
             </div>
           )}
         </ConversationContent>
@@ -296,7 +294,7 @@ function Chat() {
             )
           }
           onSubmit={({ text, files }) => submit(text, files)}
-          className="mx-auto w-full max-w-3xl overflow-hidden rounded-2xl border-border/75 bg-card/72 shadow-panel focus-within:border-ring/60"
+          className="mx-auto w-full max-w-3xl [&_[data-slot=input-group]]:overflow-hidden [&_[data-slot=input-group]]:rounded-2xl [&_[data-slot=input-group]]:border-border/75 [&_[data-slot=input-group]]:bg-card/72 [&_[data-slot=input-group]]:shadow-panel [&_[data-slot=input-group]]:focus-within:border-ring/60"
         >
           <AttachmentHeader />
           <PromptInputTextarea
@@ -307,6 +305,7 @@ function Chat() {
           />
           <PromptInputFooter className="min-h-10 px-2 pb-2">
             <AttachmentButton />
+            <span className="mr-auto text-[10px] text-muted-foreground">Max Size. 20MB</span>
             <PromptInputSubmit
               status={streaming ? "streaming" : "ready"}
               onStop={() => stopSession(sessionId)}

@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Sandbox } from "e2b";
 import { z } from "zod";
+import { connectSandbox, dropSandbox } from "@/lib/sandbox-pool.server";
 
 const bodySchema = z.discriminatedUnion("action", [
   z.object({
@@ -38,11 +39,17 @@ export const Route = createFileRoute("/api/terminal")({
         const body = parsed.data;
 
         if (body.action !== "open") {
-          try {
-            const sb = await Sandbox.connect(body.sandboxId, opts(apiKey));
+          const run = async () => {
+            const sb = await connectSandbox(body.sandboxId, apiKey);
             if (body.action === "input")
               await sb.pty.sendInput(body.pid, new TextEncoder().encode(body.data));
             else await sb.pty.resize(body.pid, { cols: body.cols, rows: body.rows });
+          };
+          try {
+            await run().catch(async () => {
+              dropSandbox(body.sandboxId);
+              await run();
+            });
             return Response.json({ ok: true });
           } catch (error) {
             return Response.json(

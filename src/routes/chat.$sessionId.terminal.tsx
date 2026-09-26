@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, RotateCcw, SquareTerminal } from "lucide-react";
 import "@xterm/xterm/css/xterm.css";
 import { Button } from "@/components/ui/button";
-import { getSession, setSessionSandbox } from "@/lib/chat-store";
+import { getSession, setSessionSandbox, syncSandboxFiles } from "@/lib/chat-store";
 import { useChatStore } from "@/lib/use-chat-store";
 
 export const Route = createFileRoute("/chat/$sessionId/terminal")({
@@ -71,7 +71,8 @@ function TerminalPage() {
         fontFamily: '"JetBrains Mono", ui-monospace, monospace',
         fontSize: window.innerWidth < 640 ? 12 : 13,
         lineHeight: 1.25,
-        scrollback: 5000,
+        scrollback: 3000,
+        smoothScrollDuration: 0,
         theme: {
           background: cssColor("--background"),
           foreground: cssColor("--foreground"),
@@ -107,8 +108,15 @@ function TerminalPage() {
         }
         flushing = false;
       };
+      // Sinkronkan File Manager setelah perintah dijalankan (Enter).
+      let syncTimer = 0;
+      const scheduleSync = () => {
+        window.clearTimeout(syncTimer);
+        syncTimer = window.setTimeout(() => void syncSandboxFiles(sessionId), 1500);
+      };
       const send = (data: string) => {
         queue.push(data);
+        if (data.includes("\r")) scheduleSync();
         void flush();
       };
       sendRef.current = (data) => {
@@ -116,6 +124,27 @@ function TerminalPage() {
         term.focus();
       };
       const input = term.onData(send);
+
+      // Gabungkan output per frame supaya render tetap mulus.
+      let pending: Uint8Array[] = [];
+      let frame = 0;
+      const writeOut = (chunk: Uint8Array) => {
+        pending.push(chunk);
+        if (frame) return;
+        frame = requestAnimationFrame(() => {
+          frame = 0;
+          const parts = pending;
+          pending = [];
+          const size = parts.reduce((n, p) => n + p.length, 0);
+          const merged = new Uint8Array(size);
+          let at = 0;
+          for (const p of parts) {
+            merged.set(p, at);
+            at += p.length;
+          }
+          term.write(merged);
+        });
+      };
 
       let resizeTimer = 0;
       const onResize = () => {
@@ -134,6 +163,9 @@ function TerminalPage() {
       cleanup = () => {
         observer.disconnect();
         input.dispose();
+        cancelAnimationFrame(frame);
+        window.clearTimeout(syncTimer);
+        void syncSandboxFiles(sessionId);
         term.dispose();
       };
 
@@ -162,7 +194,7 @@ function TerminalPage() {
             const event = JSON.parse(line) as { t?: string; v?: string; id?: string; fresh?: boolean; pid?: number };
             if (event.t === "data") {
               const bin = atob(String(event.v));
-              term.write(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
+              writeOut(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
             } else if (event.t === "sandbox") {
               sandboxId = String(event.id);
               setSessionSandbox(sessionId, sandboxId);

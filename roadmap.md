@@ -14,3 +14,13 @@
 - [x] Pencarian file, folder, dan isi file di File Manager
 - [ ] Aksi file di File Manager: hapus, ganti nama, salin, pindah folder
 - [ ] Validasi alur chat dan unggah file pada ponsel dan desktop
+- [x] Menu Pengaturan dengan Secret, Data, Tentang
+- [x] AI: form secret aman, daftar & uji token tanpa menampilkan nilai
+- [x] Hapus popup info tombol lampiran
+- [x] Terminal lebih ringan (koneksi sandbox di-cache, output per frame)
+- [x] Hasil terminal (mkdir/cp/script) tersinkron ke File Manager
+- [x] Animasi status AI menggantikan teks "Menyiapkan"
+- [ ] Kirim perubahan ke GitHub WenGPT (menunggu persetujuan)
+- [x] Rapikan judul chat dan garis kotak pesan; pertahankan label batas file 20MB
+- [x] Periksa secret otomatis saat diterapkan dan hilangkan tombol uji
+- [ ] Periksa status deploy setelah perubahan

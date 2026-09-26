@@ -3,6 +3,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { streamText, convertToModelMessages, tool, stepCountIs, type UIMessage } from "ai";
 import { z } from "zod";
 import { Sandbox } from "e2b";
+import { verifySecret } from "@/lib/secret-test.server";
 
 const SYSTEM_PROMPT = `/no_think
 Kamu adalah WenGPT, asisten AI yang ramah dan cerdas. Jawab dalam bahasa yang dipakai pengguna (default Bahasa Indonesia).
@@ -30,6 +31,9 @@ Aturan:
 - Jika error, BACA pesan error baris per baris, perbaiki akar masalahnya dengan menulis ulang file utuh lewat write_file, lalu uji ulang. Jangan umumkan hasil ke pengguna sebelum uji terakhir berhasil.
 - File dari sesi lain milik pengguna otomatis tersedia di sandbox (File Manager dipakai bersama semua sesi).
 - Lampiran pengguna berada di folder /home/user/attached_assets. Sebutkan nama, tipe, dan ukuran file sebelum menganalisis. Untuk file besar, lihat bagian yang relevan saja dengan tool shell dan jangan menampilkan seluruh isi.
+- Secret/token pengguna: jika pengguna minta menyimpan/load token, API key, atau secret, panggil request_secret (nama HURUF_BESAR, mis. GITHUB_TOKEN) supaya muncul form input aman. JANGAN pernah minta pengguna menempel token di chat.
+- Untuk melihat secret yang tersimpan pakai list_secrets; untuk menguji apakah token benar dan aktif pakai test_secret. Nilai secret tidak pernah terlihat olehmu dan jangan pernah mencoba menampilkannya.
+- Secret tersedia sebagai environment variable di run_command (mis. $GITHUB_TOKEN). Jangan echo/print nilainya.
 - Folder kerja: /home/user. Jangan jalankan perintah yang berjalan selamanya (server) tanpa '&' di belakang.`;
 
 // The "address book": the Kaggle notebook reports its current tunnel URL to a
@@ -147,6 +151,7 @@ export const Route = createFileRoute("/api/chat")({
           sandboxId?: string | null;
           files?: SharedFile[];
           attachments?: Attachment[];
+          secrets?: { name: string; service: string; value: string }[];
         };
         try {
           body = (await request.json()) as typeof body;
@@ -171,6 +176,23 @@ export const Route = createFileRoute("/api/chat")({
           .safeParse(body.attachments ?? []);
         if (!attachmentResult.success)
           return chatError("Lampiran tidak valid atau melebihi batas 20 MB.");
+        const secrets = z
+          .array(
+            z.object({
+              name: z.string().regex(/^[A-Z_][A-Z0-9_]{0,63}$/),
+              service: z.string().max(40),
+              value: z.string().max(8000),
+            }),
+          )
+          .max(50)
+          .catch([])
+          .parse(body.secrets ?? []);
+        const secretEnvs = Object.fromEntries(secrets.map((s) => [s.name, s.value]));
+        const redact = (text: string) =>
+          secrets.reduce(
+            (out, s) => (s.value.length >= 6 ? out.split(s.value).join(`[SECRET:${s.name}]`) : out),
+            text,
+          );
         const baseURL = await resolveAiBaseUrl();
         const provider = createOpenAI({ apiKey, baseURL });
         const model = process.env["AI_MODEL"] || "gpt-4o-mini";
@@ -239,11 +261,15 @@ export const Route = createFileRoute("/api/chat")({
             execute: async ({ command }) => {
               try {
                 const sb = await getSandbox();
-                const r = await sb.commands.run(command, { timeoutMs: 120_000, cwd: "/home/user" });
+                const r = await sb.commands.run(command, {
+                  timeoutMs: 120_000,
+                  cwd: "/home/user",
+                  envs: secretEnvs,
+                });
                 return {
                   exitCode: r.exitCode,
-                  stdout: clip(r.stdout),
-                  stderr: clip(r.stderr, 3000),
+                  stdout: clip(redact(r.stdout)),
+                  stderr: clip(redact(r.stderr), 3000),
                   dirs: await listDirs(sb),
                 };
               } catch (err: unknown) {
@@ -256,10 +282,10 @@ export const Route = createFileRoute("/api/chat")({
                 if (typeof e.exitCode === "number")
                   return {
                     exitCode: e.exitCode,
-                    stdout: clip(e.stdout ?? ""),
-                    stderr: clip(e.stderr ?? "", 3000),
+                    stdout: clip(redact(e.stdout ?? "")),
+                    stderr: clip(redact(e.stderr ?? ""), 3000),
                   };
-                return { exitCode: -1, stdout: "", stderr: e.message ?? String(err) };
+                return { exitCode: -1, stdout: "", stderr: redact(e.message ?? String(err)) };
               }
             },
           }),
@@ -276,6 +302,42 @@ export const Route = createFileRoute("/api/chat")({
               } catch (err) {
                 return { ok: false, error: err instanceof Error ? err.message : String(err) };
               }
+            },
+          }),
+          request_secret: tool({
+            description:
+              "Tampilkan form input aman di chat agar pengguna memasukkan token/API key. Nilai tidak pernah terlihat olehmu.",
+            inputSchema: z.object({
+              name: z.string().describe("Nama secret HURUF_BESAR, contoh GITHUB_TOKEN"),
+              service: z
+                .string()
+                .optional()
+                .describe("github, vercel, openai, anthropic, groq, gemini, huggingface, telegram, stripe, netlify, cloudflare, e2b, openrouter, atau lainnya"),
+              reason: z.string().optional().describe("Kalimat singkat untuk apa token dipakai"),
+            }),
+            execute: async ({ name }) => ({
+              ok: true,
+              requested: true,
+              name: name.toUpperCase().replace(/[^A-Z0-9_]/g, "_"),
+              detail: "Form sudah ditampilkan. Minta pengguna mengisi lalu klik Terapkan.",
+            }),
+          }),
+          list_secrets: tool({
+            description: "Lihat daftar secret tersimpan (nama & layanan saja, tanpa nilai).",
+            inputSchema: z.object({}),
+            execute: async () => ({
+              ok: true,
+              secrets: secrets.map((s) => ({ name: s.name, service: s.service, length: s.value.length })),
+            }),
+          }),
+          test_secret: tool({
+            description: "Uji apakah secret tersimpan valid dan aktif di layanannya. Tidak menampilkan nilai.",
+            inputSchema: z.object({ name: z.string(), service: z.string().optional() }),
+            execute: async ({ name, service }) => {
+              const found = secrets.find((s) => s.name === name.toUpperCase());
+              if (!found) return { ok: false, name, status: "missing", detail: "Secret belum disimpan." };
+              const r = await verifySecret(service || found.service, found.value);
+              return { ok: r.status === "active", name: found.name, service: service || found.service, ...r };
             },
           }),
         };
@@ -296,7 +358,7 @@ export const Route = createFileRoute("/api/chat")({
             controllerRef = controller;
             try {
               for await (const part of result.fullStream) {
-                if (part.type === "text-delta") emit({ t: "text", v: part.text });
+                if (part.type === "text-delta") emit({ t: "text", v: redact(part.text) });
                 else if (part.type === "tool-input-start") {
                   emit({ t: "tool", id: part.id, name: part.toolName, input: {}, at: Date.now() });
                 } else if (part.type === "tool-call") {

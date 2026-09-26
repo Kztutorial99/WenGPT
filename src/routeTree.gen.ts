@@ -11,7 +11,10 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as HistoryRouteImport } from './routes/history'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
+import { Route as ApiSandboxFilesRouteImport } from './routes/api/sandbox-files'
+import { Route as ApiSecretTestRouteImport } from './routes/api/secret-test'
 import { Route as ApiTerminalRouteImport } from './routes/api/terminal'
 import { Route as ChatSessionIdRouteImport } from './routes/chat.$sessionId'
 import { Route as ChatSessionIdIndexRouteImport } from './routes/chat.$sessionId.index'
@@ -29,9 +32,24 @@ const HistoryRoute = HistoryRouteImport.update({
   path: '/history',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiChatRoute = ApiChatRouteImport.update({
   id: '/api/chat',
   path: '/api/chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSandboxFilesRoute = ApiSandboxFilesRouteImport.update({
+  id: '/api/sandbox-files',
+  path: '/api/sandbox-files',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSecretTestRoute = ApiSecretTestRouteImport.update({
+  id: '/api/secret-test',
+  path: '/api/secret-test',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiTerminalRoute = ApiTerminalRouteImport.update({
@@ -68,7 +86,10 @@ const ChatSessionIdTimelineRoute = ChatSessionIdTimelineRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/history': typeof HistoryRoute
+  '/settings': typeof SettingsRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/sandbox-files': typeof ApiSandboxFilesRoute
+  '/api/secret-test': typeof ApiSecretTestRoute
   '/api/terminal': typeof ApiTerminalRoute
   '/chat/$sessionId': typeof ChatSessionIdRouteWithChildren
   '/chat/$sessionId/files': typeof ChatSessionIdFilesRoute
@@ -79,7 +100,10 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/history': typeof HistoryRoute
+  '/settings': typeof SettingsRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/sandbox-files': typeof ApiSandboxFilesRoute
+  '/api/secret-test': typeof ApiSecretTestRoute
   '/api/terminal': typeof ApiTerminalRoute
   '/chat/$sessionId/files': typeof ChatSessionIdFilesRoute
   '/chat/$sessionId/terminal': typeof ChatSessionIdTerminalRoute
@@ -90,7 +114,10 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/history': typeof HistoryRoute
+  '/settings': typeof SettingsRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/sandbox-files': typeof ApiSandboxFilesRoute
+  '/api/secret-test': typeof ApiSecretTestRoute
   '/api/terminal': typeof ApiTerminalRoute
   '/chat/$sessionId': typeof ChatSessionIdRouteWithChildren
   '/chat/$sessionId/files': typeof ChatSessionIdFilesRoute
@@ -103,7 +130,10 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/history'
+    | '/settings'
     | '/api/chat'
+    | '/api/sandbox-files'
+    | '/api/secret-test'
     | '/api/terminal'
     | '/chat/$sessionId'
     | '/chat/$sessionId/files'
@@ -114,7 +144,10 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/history'
+    | '/settings'
     | '/api/chat'
+    | '/api/sandbox-files'
+    | '/api/secret-test'
     | '/api/terminal'
     | '/chat/$sessionId/files'
     | '/chat/$sessionId/terminal'
@@ -124,7 +157,10 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/history'
+    | '/settings'
     | '/api/chat'
+    | '/api/sandbox-files'
+    | '/api/secret-test'
     | '/api/terminal'
     | '/chat/$sessionId'
     | '/chat/$sessionId/files'
@@ -136,7 +172,10 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   HistoryRoute: typeof HistoryRoute
+  SettingsRoute: typeof SettingsRoute
   ApiChatRoute: typeof ApiChatRoute
+  ApiSandboxFilesRoute: typeof ApiSandboxFilesRoute
+  ApiSecretTestRoute: typeof ApiSecretTestRoute
   ApiTerminalRoute: typeof ApiTerminalRoute
   ChatSessionIdRoute: typeof ChatSessionIdRouteWithChildren
 }
@@ -157,11 +196,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HistoryRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/chat': {
       id: '/api/chat'
       path: '/api/chat'
       fullPath: '/api/chat'
       preLoaderRoute: typeof ApiChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/sandbox-files': {
+      id: '/api/sandbox-files'
+      path: '/api/sandbox-files'
+      fullPath: '/api/sandbox-files'
+      preLoaderRoute: typeof ApiSandboxFilesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/secret-test': {
+      id: '/api/secret-test'
+      path: '/api/secret-test'
+      fullPath: '/api/secret-test'
+      preLoaderRoute: typeof ApiSecretTestRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/terminal': {
@@ -230,7 +290,10 @@ const ChatSessionIdRouteWithChildren = ChatSessionIdRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   HistoryRoute: HistoryRoute,
+  SettingsRoute: SettingsRoute,
   ApiChatRoute: ApiChatRoute,
+  ApiSandboxFilesRoute: ApiSandboxFilesRoute,
+  ApiSecretTestRoute: ApiSecretTestRoute,
   ApiTerminalRoute: ApiTerminalRoute,
   ChatSessionIdRoute: ChatSessionIdRouteWithChildren,
 }
