@@ -129,14 +129,19 @@ def upstash(path):
     try: requests.post(f"{UPSTASH_URL}/{path}", headers={"Authorization": f"Bearer {UPSTASH_TOKEN}"}, timeout=10)
     except Exception as e: print("Gagal lapor:", e, flush=True)
 
+def tunnel_ok(url):
+    # Cek dari luar lewat alamat publik: proses cloudflared bisa hidup tapi tunnel-nya putus
+    try: return requests.get(f"{url}/api/tags", timeout=15).status_code == 200
+    except Exception: return False
+
 def guard():
-    p, n = None, 0
+    p, n, fails = None, 0, 0
     while True:
         if not ollama_ok():
             upstash(f"del/{quote(REG_KEY, safe='')}")   # jangan arahkan orang ke server mati
             print("[guard] Ollama mati -> hidupkan ulang", flush=True); start_ollama()
         if p is None or p.poll() is not None:
-            p = start_tunnel(); STATE["url"] = None
+            p = start_tunnel(); STATE["url"] = None; fails = 0
             print("[guard] tunnel dinyalakan", flush=True)
             time.sleep(10)
         url = last_url()
@@ -144,7 +149,23 @@ def guard():
             STATE["url"] = url
             print(f"{'='*60}\nAKUN {ACCOUNT_ID} URL: {url}\n{'='*60}", flush=True)
         if url and ollama_ok():
-            upstash(f"set/{quote(REG_KEY, safe='')}/{quote(url, safe='')}?EX=180")
+            if tunnel_ok(url):
+                fails = 0
+                upstash(f"set/{quote(REG_KEY, safe='')}/{quote(url, safe='')}?EX=180")
+            else:
+                fails += 1
+                print(f"[guard] tunnel tidak merespons ({fails}/3)", flush=True)
+                if fails >= 3:
+                    upstash(f"del/{quote(REG_KEY, safe='')}")
+                    print("[guard] tunnel putus -> matikan & nyalakan ulang cloudflared", flush=True)
+                    try: p.kill()
+                    except Exception: pass
+                    p = None
+        elif not url and p is not None and time.time() - os.path.getmtime(TUNNEL_LOG) > 120:
+            print("[guard] tunnel tidak memberi alamat -> nyalakan ulang", flush=True)
+            try: p.kill()
+            except Exception: pass
+            p = None
         n += 1
         if n % 5 == 0: print(f"[{n} menit] hidup | {STATE['url']}", flush=True)
         time.sleep(60)
