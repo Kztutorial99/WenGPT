@@ -196,7 +196,7 @@ function ThinkingItem({ entry, number, active }: { entry: Extract<TimelineEntry,
   const [expanded, setExpanded] = useState(false);
   return (
     <li id={entry.id} className="mb-7 min-w-0 scroll-mt-24">
-      <span className={`absolute -left-[6px] mt-1 size-3 rounded-full border-2 border-background ${active ? "animate-pulse bg-primary" : "bg-success"}`} />
+      <span className={`absolute -left-[6px] mt-1 size-3 rounded-full border-2 border-background ${active ? "animate-pulse bg-warning" : "bg-success"}`} />
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
@@ -209,7 +209,7 @@ function ThinkingItem({ entry, number, active }: { entry: Extract<TimelineEntry,
         <span>Proses berpikir</span>
         <span>·</span>
         {active ? (
-          <span className="text-primary">Berjalan<span className="inline-block w-4 animate-pulse">...</span></span>
+          <span className="text-warning">Berjalan<span className="inline-block w-4 animate-pulse">...</span></span>
         ) : (
           <span className="text-success">Selesai</span>
         )}
@@ -230,13 +230,13 @@ function WebItem({ run, number }: { run: ToolRun; number: number }) {
   const failed = !!output && output.ok === false;
   return (
     <li id={run.id} className="mb-7 min-w-0 scroll-mt-24">
-      <span className={`absolute -left-[6px] mt-1 size-3 rounded-full border-2 border-background ${!output ? "animate-pulse bg-primary" : failed ? "bg-destructive" : "bg-success"}`} />
+      <span className={`absolute -left-[6px] mt-1 size-3 rounded-full border-2 border-background ${!output ? "animate-pulse bg-warning" : failed ? "bg-destructive" : "bg-success"}`} />
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
         <span className="font-mono">{number}.</span>
         <Globe className="size-3.5 text-primary" />
         <span>{search ? "Pencarian web" : "Baca halaman"}</span>
         <span>·</span>
-        <span className={failed ? "text-destructive" : output ? "text-success" : ""}>
+        <span className={failed ? "text-destructive" : output ? "text-success" : "text-warning"}>
           {!output ? (search ? "Mencari…" : "Membaca…") : failed ? "Gagal" : search ? `${output.results?.length ?? 0} hasil` : "Selesai"}
         </span>
         <span className="ml-auto inline-flex items-center gap-1"><Clock3 className="size-3" />{formatTime(run.startedAt)} · {duration(run)}</span>
@@ -306,14 +306,14 @@ function RunItem({ run, number, sessionId, live }: { run: ToolRun; number: numbe
   return (
     <li id={run.id} className="mb-7 min-w-0 scroll-mt-24">
       <span
-        className={`absolute -left-[6px] mt-1 size-3 rounded-full border-2 border-background ${!output ? "animate-pulse bg-muted-foreground" : failed ? "bg-destructive" : "bg-success"}`}
+        className={`absolute -left-[6px] mt-1 size-3 rounded-full border-2 border-background ${!output ? "animate-pulse bg-warning" : failed ? "bg-destructive" : "bg-success"}`}
       />
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
         <span className="font-mono">{number}.</span>
         {command ? <Terminal className="size-3.5" /> : <FileText className="size-3.5" />}
         <span>{command ? "Terminal" : download ? `Unduh ${kindLabel}` : `Simpan ${kindLabel}`}</span>
         <span>·</span>
-        <span className={failed || stopped ? "text-destructive" : output ? "text-success" : "text-primary"}>
+        <span className={failed || stopped ? "text-destructive" : output ? "text-success" : "text-warning"}>
           {stopped ? "Terhenti" : !output ? <>Berjalan<span className="inline-block w-4 animate-pulse">...</span></> : failed ? "Gagal" : "Selesai"}
         </span>
         <span className="ml-auto inline-flex items-center gap-1">
