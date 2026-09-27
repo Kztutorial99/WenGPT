@@ -123,8 +123,7 @@ function emit() {
 }
 function save() {
   if (typeof window === "undefined") return;
-  localStorage.setItem(
-    STORE,
+  const data = () =>
     JSON.stringify({
       sessions: state.sessions,
       activeId: state.activeId,
@@ -132,8 +131,26 @@ function save() {
       fileOps: state.fileOps,
       folders: state.folders,
       read: state.read,
-    }),
-  );
+    });
+  try {
+    localStorage.setItem(STORE, data());
+  } catch {
+    // Penyimpanan penuh: pangkas isi tool lama supaya jawaban AI tetap tersimpan.
+    try {
+      const slim = state.sessions.map((session) => ({
+        ...session,
+        messages: session.messages.map((m) => ({
+          ...m,
+          parts: m.parts.map((p) =>
+            p.type === "tool" ? { ...p, run: { ...p.run, output: p.run.output ? ({ ok: (p.run.output as { ok?: boolean }).ok } as ToolOut) : undefined } } : p,
+          ),
+        })),
+      }));
+      localStorage.setItem(STORE, JSON.stringify({ ...JSON.parse(data()), sessions: slim }));
+    } catch {
+      /* tetap di memori */
+    }
+  }
 }
 function updateSessions(updater: (sessions: ChatSession[]) => ChatSession[]) {
   state = { ...state, sessions: updater(state.sessions) };

@@ -318,7 +318,6 @@ function Chat() {
                   )}
                   {message.parts.map((part, index) =>
                     part.type === "text" ? (
-                      index < lastToolIndex ? null :
                       <MessageResponse
                         key={`${message.id}-${index}`}
                          isAnimating={active}
@@ -371,7 +370,7 @@ function Chat() {
                      </div>
                    )}
                   {message.role === "assistant" && !active && lastToolIndex >= 0 &&
-                    !message.parts.some((part, index) => part.type === "text" && index > lastToolIndex && part.text.trim()) &&
+                    !message.parts.some((part, index) => part.type === "text" && part.text.trim()) &&
                     !message.parts.some((part) => part.type === "cancelled") && (
                       <p className="text-sm text-muted-foreground">
                         Proses selesai. Lihat hasil lengkapnya di Linimasa{sources.length ? " atau sumber di bawah" : ""}.
