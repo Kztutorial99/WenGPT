@@ -60,7 +60,7 @@ import {
   type SavedFile,
 } from "@/lib/chat-store";
 import { loadAttachment } from "@/lib/attachment-store";
-import { FilePreview } from "@/components/file-preview";
+import { FilePreview, sandboxLink } from "@/components/file-preview";
 import { useChatStore } from "@/lib/use-chat-store";
 
 export const Route = createFileRoute("/chat/$sessionId/files")({
@@ -98,6 +98,14 @@ type MoveTarget = {
 type DeleteTarget = { title: string; detail: string; submit: () => void };
 
 async function download(file: SavedFile) {
+  const link = file.truncated ? sandboxLink(file) : null;
+  if (link) {
+    const a = document.createElement("a");
+    a.href = link;
+    a.download = name(file.path);
+    a.click();
+    return;
+  }
   const blob = file.attachmentId
     ? await loadAttachment(file.attachmentId)
     : new Blob([file.content], { type: "text/plain;charset=utf-8" });

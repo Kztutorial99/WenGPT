@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as HistoryRouteImport } from './routes/history'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
+import { Route as ApiSandboxDownloadRouteImport } from './routes/api/sandbox-download'
 import { Route as ApiSandboxFilesRouteImport } from './routes/api/sandbox-files'
 import { Route as ApiSecretTestRouteImport } from './routes/api/secret-test'
 import { Route as ApiTerminalRouteImport } from './routes/api/terminal'
@@ -40,6 +41,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const ApiChatRoute = ApiChatRouteImport.update({
   id: '/api/chat',
   path: '/api/chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSandboxDownloadRoute = ApiSandboxDownloadRouteImport.update({
+  id: '/api/sandbox-download',
+  path: '/api/sandbox-download',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiSandboxFilesRoute = ApiSandboxFilesRouteImport.update({
@@ -88,6 +94,7 @@ export interface FileRoutesByFullPath {
   '/history': typeof HistoryRoute
   '/settings': typeof SettingsRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/sandbox-download': typeof ApiSandboxDownloadRoute
   '/api/sandbox-files': typeof ApiSandboxFilesRoute
   '/api/secret-test': typeof ApiSecretTestRoute
   '/api/terminal': typeof ApiTerminalRoute
@@ -102,6 +109,7 @@ export interface FileRoutesByTo {
   '/history': typeof HistoryRoute
   '/settings': typeof SettingsRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/sandbox-download': typeof ApiSandboxDownloadRoute
   '/api/sandbox-files': typeof ApiSandboxFilesRoute
   '/api/secret-test': typeof ApiSecretTestRoute
   '/api/terminal': typeof ApiTerminalRoute
@@ -116,6 +124,7 @@ export interface FileRoutesById {
   '/history': typeof HistoryRoute
   '/settings': typeof SettingsRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/sandbox-download': typeof ApiSandboxDownloadRoute
   '/api/sandbox-files': typeof ApiSandboxFilesRoute
   '/api/secret-test': typeof ApiSecretTestRoute
   '/api/terminal': typeof ApiTerminalRoute
@@ -132,6 +141,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/settings'
     | '/api/chat'
+    | '/api/sandbox-download'
     | '/api/sandbox-files'
     | '/api/secret-test'
     | '/api/terminal'
@@ -146,6 +156,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/settings'
     | '/api/chat'
+    | '/api/sandbox-download'
     | '/api/sandbox-files'
     | '/api/secret-test'
     | '/api/terminal'
@@ -159,6 +170,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/settings'
     | '/api/chat'
+    | '/api/sandbox-download'
     | '/api/sandbox-files'
     | '/api/secret-test'
     | '/api/terminal'
@@ -174,6 +186,7 @@ export interface RootRouteChildren {
   HistoryRoute: typeof HistoryRoute
   SettingsRoute: typeof SettingsRoute
   ApiChatRoute: typeof ApiChatRoute
+  ApiSandboxDownloadRoute: typeof ApiSandboxDownloadRoute
   ApiSandboxFilesRoute: typeof ApiSandboxFilesRoute
   ApiSecretTestRoute: typeof ApiSecretTestRoute
   ApiTerminalRoute: typeof ApiTerminalRoute
@@ -208,6 +221,13 @@ declare module '@tanstack/react-router' {
       path: '/api/chat'
       fullPath: '/api/chat'
       preLoaderRoute: typeof ApiChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/sandbox-download': {
+      id: '/api/sandbox-download'
+      path: '/api/sandbox-download'
+      fullPath: '/api/sandbox-download'
+      preLoaderRoute: typeof ApiSandboxDownloadRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/sandbox-files': {
@@ -292,6 +312,7 @@ const rootRouteChildren: RootRouteChildren = {
   HistoryRoute: HistoryRoute,
   SettingsRoute: SettingsRoute,
   ApiChatRoute: ApiChatRoute,
+  ApiSandboxDownloadRoute: ApiSandboxDownloadRoute,
   ApiSandboxFilesRoute: ApiSandboxFilesRoute,
   ApiSecretTestRoute: ApiSecretTestRoute,
   ApiTerminalRoute: ApiTerminalRoute,

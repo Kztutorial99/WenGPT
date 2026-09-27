@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import { loadAttachment } from "@/lib/attachment-store";
-import type { SavedFile } from "@/lib/chat-store";
+import { getSession, type SavedFile } from "@/lib/chat-store";
+
+/** Link unduhan langsung untuk file hasil sandbox (video hasil download, dll). */
+export function sandboxLink(file: SavedFile) {
+  if (!file.key?.startsWith("sb:") || !file.sessionId) return null;
+  const id = getSession(file.sessionId)?.sandboxId;
+  return id ? `/api/sandbox-download?sandboxId=${encodeURIComponent(id)}&path=${encodeURIComponent(file.path)}` : null;
+}
 
 const EXT_TYPES: Record<string, string> = {
   png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp",
@@ -11,7 +18,7 @@ const EXT_TYPES: Record<string, string> = {
 
 export function kindOf(file: Pick<SavedFile, "path" | "mediaType">) {
   const ext = file.path.split(".").pop()?.toLowerCase() ?? "";
-  const type = file.mediaType || EXT_TYPES[ext] || "";
+  const type = (file.mediaType !== "application/octet-stream" && file.mediaType) || EXT_TYPES[ext] || "";
   if (type.startsWith("image/")) return "image";
   if (type.startsWith("video/")) return "video";
   if (type.startsWith("audio/")) return "audio";
@@ -28,7 +35,12 @@ export function FilePreview({ file, className = "" }: { file: SavedFile; classNa
   useEffect(() => {
     setUrl(null);
     setFailed(false);
-    if (kind === "text" || !file.attachmentId) return;
+    if (kind === "text") return;
+    if (!file.attachmentId) {
+      const link = sandboxLink(file);
+      if (link) setUrl(link);
+      return;
+    }
     let objectUrl: string | null = null;
     let cancelled = false;
     loadAttachment(file.attachmentId)
@@ -43,10 +55,10 @@ export function FilePreview({ file, className = "" }: { file: SavedFile; classNa
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [file.attachmentId, kind]);
+  }, [file.attachmentId, file.path, kind]);
 
   if (kind !== "text") {
-    if (!file.attachmentId || failed)
+    if ((!file.attachmentId && !sandboxLink(file)) || failed)
       return (
         <div className={`flex items-center justify-center p-6 text-center text-xs text-muted-foreground ${className}`}>
           Pratinjau tidak tersedia untuk file ini. Unduh untuk membukanya.
@@ -64,7 +76,7 @@ export function FilePreview({ file, className = "" }: { file: SavedFile; classNa
           <img src={url} alt={file.path.split("/").pop() ?? ""} className="max-h-full max-w-full rounded-md object-contain" />
         )}
         {kind === "video" && (
-          <video src={url} controls playsInline className="max-h-full max-w-full rounded-md" />
+          <video src={url} onError={() => setFailed(true)} controls playsInline className="max-h-full max-w-full rounded-md" />
         )}
         {kind === "audio" && <audio src={url} controls className="w-full max-w-md" />}
         {kind === "pdf" && (
