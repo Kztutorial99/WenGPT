@@ -39,6 +39,7 @@
 - [x] Perbaiki sumber pencarian, konteks tanggal terkini, dan penanganan halaman yang memblokir pembacaan
 - [x] Ringkas kartu situs serta tampilkan status selesai di bawah Linimasa
 - [x] Kaggle: cache dataset sudah memuat model+vision (mmproj); skrip pakai cache tanpa download ulang; push
+- [x] Tampilkan ikon, nama, dan ukuran file di pesan user setelah dikirim; push
 
 - [ ] Cek kenapa WenGPT belum dapat respons AI walau sesi Kaggle running (17 Sep 09:17 UTC)
 - [ ] Pastikan putaran watchdog berikutnya restart akun 3 (sesi hidup tapi AI mati, fail 1/2)
