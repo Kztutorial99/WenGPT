@@ -237,43 +237,6 @@ function relevantHit(result: WebHit, query: string) {
   const title = result.title.toLowerCase();
   return terms.filter((word) => title.includes(word)).length >= Math.min(2, terms.length);
 }
-// Cadangan berita: Google News RSS (buka lewat server, formatnya stabil).
-async function searchGoogleNews(query: string, max: number) {
-  const res = await fetch(
-    `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&safe=off&hl=id&gl=ID&ceid=ID:id`,
-    { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(8_000) },
-  );
-  if (!res.ok) throw new Error(`Google News ${res.status}`);
-  const xml = await res.text();
-  const out: WebHit[] = [];
-  const currentYear = new Date().getUTCFullYear();
-  for (const item of xml.match(/<item>[\s\S]*?<\/item>/g) ?? []) {
-    const g = (tag: string) => decodeHtml(item.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`))?.[1] ?? "");
-    const url = g("link").replace(/&amp;/g, "&");
-    const source = item.match(/<source[^>]*>([\s\S]*?)<\/source>/)?.[1] ?? "";
-    const published = Date.parse(g("pubDate"));
-    if (!Number.isFinite(published) || new Date(published).getUTCFullYear() < currentYear - 1) continue;
-    const h = hit(g("title"), url, `${source ? `${decodeHtml(source)} · ` : ""}${new Date(published).toLocaleDateString("id-ID", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" })}`);
-    if (h) out.push(h);
-    if (out.length >= max) break;
-  }
-  return out;
-}
-async function searchBing(query: string, max: number) {
-  const res = await fetch(`https://www.bing.com/search?format=rss&setlang=id&cc=ID&adlt=off&q=${encodeURIComponent(query)}`, {
-    headers: { "User-Agent": UA, "Accept-Language": "id,en;q=0.8" },
-    signal: AbortSignal.timeout(8_000),
-  });
-  const xml = await res.text();
-  const out: WebHit[] = [];
-  for (const item of xml.match(/<item>[\s\S]*?<\/item>/g) ?? []) {
-    const g = (tag: string) => item.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`))?.[1] ?? "";
-    const h = hit(g("title"), decodeHtml(g("link")), g("description"));
-    if (h) out.push(h);
-    if (out.length >= max) break;
-  }
-  return out;
-}
 // Firecrawl: pencarian + pembaca situs yang tembus JavaScript/anti-bot. Aktif bila FIRECRAWL_API_KEY ada.
 async function firecrawl(path: string, payload: unknown, timeout: number) {
   const key = process.env["FIRECRAWL_API_KEY"];
@@ -311,21 +274,10 @@ async function webSearch(query: string, max = 6) {
   const key = freshQuery.trim().toLowerCase();
   const cached = searchCache.get(key);
   if (cached && Date.now() - cached.at < 10 * 60_000) return cached.results;
-  // Bing RSS can return an empty feed from hosted servers. News is an actual fallback, not just a declared one.
-  if (process.env["FIRECRAWL_API_KEY"]) {
-    const results = await searchFirecrawl(freshQuery, max).catch(() => [] as WebHit[]);
-    if (results.length) {
-      searchCache.set(key, { at: Date.now(), results });
-      return results;
-    }
-  }
-  const engines = [searchBing, searchGoogleNews].map((fn) =>
-    fn(freshQuery, max).then((r) => {
-      const relevant = r.filter((result) => relevantHit(result, freshQuery));
-      return relevant.length ? relevant : Promise.reject(new Error("hasil tidak relevan"));
-    }),
-  );
-  const results = await Promise.any(engines).catch(() => [] as WebHit[]);
+  // Satu-satunya mesin pencari: Firecrawl (tembus JavaScript/anti-bot).
+  const results = await searchFirecrawl(freshQuery, max)
+    .then((r) => r.filter((result) => relevantHit(result, freshQuery)))
+    .catch(() => [] as WebHit[]);
   if (results.length) searchCache.set(key, { at: Date.now(), results });
   return results;
 }
