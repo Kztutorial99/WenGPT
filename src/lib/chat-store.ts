@@ -49,6 +49,7 @@ export type MessageData = {
   role: "user" | "assistant";
   parts: Part[];
   createdAt: number;
+  files?: { name: string; mediaType: string; size?: number | undefined }[];
 };
 export type ChatSession = {
   id: string;
@@ -440,19 +441,22 @@ export async function sendMessage(
   const prompt = raw.trim();
   const session = getSession(sessionId);
   if ((!prompt && !incoming.length) || !session || isStreaming(sessionId)) return;
-  await loadSecrets();
-  const newlyAttached = await persistAttachments(session, incoming);
-  const attachmentNote = newlyAttached.length
-    ? `\n\n[Lampiran pengguna]\n${newlyAttached.map((file) => `- ${file.path.replace("/home/user/", "")} (${file.mediaType}, ${file.size} byte)${file.content ? `\n  Cuplikan isi:\n${file.content}` : "\n  File biner tersedia di sandbox untuk diperiksa dengan tool."}`).join("\n")}`
-    : "";
   const visiblePrompt =
-    prompt || `Analisis ${newlyAttached.length === 1 ? "file ini" : "file-file ini"}.`;
+    prompt || `Analisis ${incoming.length === 1 ? "file ini" : "file-file ini"}.`;
   const now = Date.now();
   const user: MessageData = {
     id: crypto.randomUUID(),
     role: "user",
     parts: [{ type: "text", text: visiblePrompt }],
     createdAt: now,
+    ...(incoming.length
+      ? {
+          files: incoming.slice(0, 10).map((f) => ({
+            name: safeFileName(f.filename ?? "file"),
+            mediaType: f.mediaType || "application/octet-stream",
+          })),
+        }
+      : {}),
   };
   const assistant: MessageData = {
     id: crypto.randomUUID(),
@@ -461,6 +465,7 @@ export async function sendMessage(
     createdAt: now + 1,
   };
   const history = [...session.messages, user];
+  // Tampilkan pesan & indikator seketika, baru siapkan lampiran/secret di belakang.
   patchSession(sessionId, (current) => ({
     ...current,
     title: current.messages.length ? current.title : titleFrom([user]),
@@ -471,6 +476,31 @@ export async function sendMessage(
   controllers.set(sessionId, controller);
   state = { ...state, streamingIds: [...state.streamingIds, sessionId] };
   emit();
+  let newlyAttached: SavedFile[] = [];
+  try {
+    [, newlyAttached] = await Promise.all([loadSecrets(), persistAttachments(session, incoming)]);
+  } catch (error) {
+    controllers.delete(sessionId);
+    state = { ...state, streamingIds: state.streamingIds.filter((id) => id !== sessionId) };
+    emit();
+    throw error;
+  }
+  if (newlyAttached.length)
+    patchSession(sessionId, (current) => ({
+      ...current,
+      messages: current.messages.map((m) =>
+        m.id === user.id
+          ? { ...m, files: newlyAttached.map((f) => ({ name: f.path.split("/").pop() ?? "file", mediaType: f.mediaType ?? "", size: f.size })) }
+          : m,
+      ),
+    }));
+  const attachmentNote = newlyAttached.length
+    ? `\n\n[Lampiran pengguna]\n${newlyAttached.map((file) => `- ${file.path.replace("/home/user/", "")} (${file.mediaType}, ${file.size} byte)${file.content ? `\n  Cuplikan isi:\n${file.content}` : "\n  File biner tersedia di sandbox untuk diperiksa dengan tool."}`).join("\n")}`
+    : "";
+  // Hanya kirim lampiran baru; sandbox lama sudah punya file sebelumnya.
+  const toUpload = session.sandboxId
+    ? newlyAttached
+    : state.attachments.filter((f) => f.attachmentId && f.sessionId === sessionId).slice(0, 10);
   try {
     const response = await fetch("/api/chat", {
       method: "POST",
@@ -484,7 +514,7 @@ export async function sendMessage(
           .slice(0, 40)
           .map(({ path, content }) => ({ path, content })),
         secrets: secretPayload(),
-        attachments: await attachmentPayload(state.attachments.filter((f) => f.attachmentId).slice(0, 10)),
+        attachments: await attachmentPayload(toUpload),
         messages: history.slice(-16).map((message) => ({
           id: message.id,
           role: message.role,
