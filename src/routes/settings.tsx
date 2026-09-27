@@ -47,10 +47,10 @@ import { loadAllFiles } from "@/lib/chat-store";
 export const Route = createFileRoute("/settings")({
   head: () => ({
     meta: [
-      { title: "Pengaturan — WenGPT" },
-      { name: "description", content: "Kelola secret, token API, dan data WenGPT." },
-      { property: "og:title", content: "Pengaturan — WenGPT" },
-      { property: "og:description", content: "Kelola secret, token API, dan data WenGPT." },
+      { title: "Pengaturan — WenGPT Prime" },
+      { name: "description", content: "Kelola secret, token API, dan data WenGPT Prime." },
+      { property: "og:title", content: "Pengaturan — WenGPT Prime" },
+      { property: "og:description", content: "Kelola secret, token API, dan data WenGPT Prime." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -212,7 +212,7 @@ function SecretsPanel() {
         <div>
           <h2 className="text-lg font-semibold">Secret & token</h2>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            Dipakai WenGPT sebagai variabel lingkungan di sandbox. AI bisa memakai dan menguji tanpa melihat nilainya.
+            Dipakai WenGPT Prime sebagai variabel lingkungan di sandbox. AI bisa memakai dan menguji tanpa melihat nilainya.
           </p>
         </div>
         <Button size="sm" onClick={() => { setEditing(null); setDialog(true); }}>
@@ -345,7 +345,7 @@ function DataPanel() {
 function AboutPanel() {
   return (
     <section className="grid gap-4">
-      <h2 className="text-lg font-semibold">Tentang WenGPT</h2>
+      <h2 className="text-lg font-semibold">Tentang WenGPT Prime</h2>
       <div className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/70 bg-card/55">
         <Row title="Asisten" detail="Chat AI dengan sandbox Linux, terminal, dan File Manager." />
         <Row title="Keamanan secret" detail="Enkripsi AES-GCM di perangkat; nilai disamarkan dari keluaran AI." />

@@ -39,12 +39,12 @@ import { useViewportBox } from "@/lib/viewport";
 export const Route = createFileRoute("/chat/$sessionId/")({
   head: () => ({
     meta: [
-      { title: "Chat — WenGPT" },
-      { name: "description", content: "Sesi percakapan WenGPT dengan terminal dan File Manager." },
-      { property: "og:title", content: "Chat — WenGPT" },
+      { title: "Chat — WenGPT Prime" },
+      { name: "description", content: "Sesi percakapan WenGPT Prime dengan terminal dan File Manager." },
+      { property: "og:title", content: "Chat — WenGPT Prime" },
       {
         property: "og:description",
-        content: "Sesi percakapan WenGPT dengan terminal dan File Manager.",
+        content: "Sesi percakapan WenGPT Prime dengan terminal dan File Manager.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -216,7 +216,7 @@ function Chat() {
           <span className="brand-mark">
             <Bot className="size-4" />
           </span>
-          <h1 className="truncate text-sm font-semibold">WenGPT</h1>
+          <h1 className="truncate text-sm font-semibold">WenGPT Prime</h1>
         </div>
         <div className="flex items-center">
           <AppNav sessionId={sessionId} />
@@ -290,7 +290,7 @@ function Chat() {
                     <span className="brand-mark size-6 rounded-sm">
                       <Bot className="size-3.5" />
                     </span>
-                    WenGPT
+                    WenGPT Prime
                   </div>
                 )}
                 <MessageContent
@@ -409,7 +409,7 @@ function Chat() {
           <PromptInputTextarea
             value={input}
             onChange={(event) => setInput(event.currentTarget.value)}
-            placeholder="Tulis pesan untuk WenGPT…"
+            placeholder="Tulis pesan untuk WenGPT Prime…"
             className="min-h-12 max-h-40 min-w-0 px-4 pt-3 pb-1 text-base leading-6 sm:text-sm"
           />
           <PromptInputFooter className="min-h-10 px-2 pb-2">

@@ -531,7 +531,7 @@ export async function sendMessage(
       }),
     });
     if (!response.ok || !response.body)
-      throw new Error((await response.text()) || "WenGPT tidak merespons.");
+      throw new Error((await response.text()) || "WenGPT Prime tidak merespons.");
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";

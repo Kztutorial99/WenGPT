@@ -9,10 +9,10 @@ import { useChatStore } from "@/lib/use-chat-store";
 export const Route = createFileRoute("/chat/$sessionId/terminal")({
   head: () => ({
     meta: [
-      { title: "Terminal — WenGPT" },
-      { name: "description", content: "Terminal shell asli di sandbox sesi WenGPT." },
-      { property: "og:title", content: "Terminal — WenGPT" },
-      { property: "og:description", content: "Terminal shell asli di sandbox sesi WenGPT." },
+      { title: "Terminal — WenGPT Prime" },
+      { name: "description", content: "Terminal shell asli di sandbox sesi WenGPT Prime." },
+      { property: "og:title", content: "Terminal — WenGPT Prime" },
+      { property: "og:description", content: "Terminal shell asli di sandbox sesi WenGPT Prime." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],

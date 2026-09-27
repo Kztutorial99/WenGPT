@@ -22,15 +22,15 @@ import { useChatStore } from "@/lib/use-chat-store";
 export const Route = createFileRoute("/chat/$sessionId/timeline")({
   head: () => ({
     meta: [
-      { title: "Linimasa eksekusi — WenGPT" },
+      { title: "Linimasa eksekusi — WenGPT Prime" },
       {
         name: "description",
-        content: "Proses berpikir, langkah, waktu, dan hasil pekerjaan WenGPT untuk satu sesi.",
+        content: "Proses berpikir, langkah, waktu, dan hasil pekerjaan WenGPT Prime untuk satu sesi.",
       },
-      { property: "og:title", content: "Linimasa eksekusi — WenGPT" },
+      { property: "og:title", content: "Linimasa eksekusi — WenGPT Prime" },
       {
         property: "og:description",
-        content: "Proses berpikir, langkah, waktu, dan hasil pekerjaan WenGPT untuk satu sesi.",
+        content: "Proses berpikir, langkah, waktu, dan hasil pekerjaan WenGPT Prime untuk satu sesi.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

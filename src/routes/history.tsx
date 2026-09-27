@@ -7,15 +7,15 @@ import { useChatStore } from "@/lib/use-chat-store";
 export const Route = createFileRoute("/history")({
   head: () => ({
     meta: [
-      { title: "Riwayat sesi — WenGPT" },
+      { title: "Riwayat sesi — WenGPT Prime" },
       {
         name: "description",
-        content: "Buka, buat, atau hapus sesi percakapan WenGPT yang tersimpan di browser ini.",
+        content: "Buka, buat, atau hapus sesi percakapan WenGPT Prime yang tersimpan di browser ini.",
       },
-      { property: "og:title", content: "Riwayat sesi — WenGPT" },
+      { property: "og:title", content: "Riwayat sesi — WenGPT Prime" },
       {
         property: "og:description",
-        content: "Buka, buat, atau hapus sesi percakapan WenGPT yang tersimpan di browser ini.",
+        content: "Buka, buat, atau hapus sesi percakapan WenGPT Prime yang tersimpan di browser ini.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

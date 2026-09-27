@@ -6,7 +6,7 @@ import { checkSecretValue, loadSecrets, recordTest, saveSecret, SERVICE_LABEL, g
 
 export function AiDots({ className = "" }: { className?: string }) {
   return (
-    <span className={`ai-dots ${className}`} role="status" aria-label="WenGPT sedang memproses">
+    <span className={`ai-dots ${className}`} role="status" aria-label="WenGPT Prime sedang memproses">
       <span />
       <span />
       <span />

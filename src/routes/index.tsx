@@ -4,10 +4,10 @@ import { bootChatStore, createSession, getSnapshot } from "@/lib/chat-store";
 
 export const Route = createFileRoute("/")({
   head: () => ({ meta: [
-    { title: "WenGPT — asisten AI dengan sandbox" },
-    { name: "description", content: "Ngobrol, membuat file, dan menjalankan pekerjaan di sandbox Linux bersama WenGPT." },
-    { property: "og:title", content: "WenGPT — asisten AI dengan sandbox" },
-    { property: "og:description", content: "Ngobrol, membuat file, dan menjalankan pekerjaan di sandbox Linux bersama WenGPT." },
+    { title: "WenGPT Prime — asisten AI dengan sandbox" },
+    { name: "description", content: "Ngobrol, membuat file, dan menjalankan pekerjaan di sandbox Linux bersama WenGPT Prime." },
+    { property: "og:title", content: "WenGPT Prime — asisten AI dengan sandbox" },
+    { property: "og:description", content: "Ngobrol, membuat file, dan menjalankan pekerjaan di sandbox Linux bersama WenGPT Prime." },
     { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" },
   ] }),
   component: Home,

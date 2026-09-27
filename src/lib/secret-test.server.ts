@@ -12,7 +12,7 @@ function checkFor(service: string, token: string): Check | null {
     case "github":
       return {
         url: "https://api.github.com/user",
-        headers: { ...bearer, Accept: "application/vnd.github+json", "User-Agent": "WenGPT" },
+        headers: { ...bearer, Accept: "application/vnd.github+json", "User-Agent": "WenGPT Prime" },
         account: (j) => j?.login,
       };
     case "vercel":

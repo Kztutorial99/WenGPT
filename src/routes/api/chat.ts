@@ -5,7 +5,7 @@ import { z } from "zod";
 import { Sandbox } from "e2b";
 import { verifySecret } from "@/lib/secret-test.server";
 
-const SYSTEM_PROMPT = `Kamu adalah WenGPT, asisten AI yang ramah dan cerdas. Jawab dalam bahasa yang dipakai pengguna (default Bahasa Indonesia).
+const SYSTEM_PROMPT = `Kamu adalah WenGPT Prime, asisten AI yang ramah dan cerdas. Jawab dalam bahasa yang dipakai pengguna (default Bahasa Indonesia).
 
 Kamu bisa ngobrol biasa, menjelaskan, menulis kode, dan menjawab pertanyaan apa pun.
 Kamu juga punya sandbox Linux (Ubuntu, Python 3, Node.js, pip, npm tersedia, akses internet) lewat tool:

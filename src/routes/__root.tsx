@@ -83,10 +83,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         content:
           "width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content",
       },
-      { title: "WenGPT" },
+      { title: "WenGPT Prime" },
       { name: "description", content: "Asisten AI dengan terminal dan File Manager." },
-      { name: "author", content: "WenGPT" },
-      { property: "og:title", content: "WenGPT" },
+      { name: "author", content: "WenGPT Prime" },
+      { property: "og:title", content: "WenGPT Prime" },
       { property: "og:description", content: "Asisten AI dengan terminal dan File Manager." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

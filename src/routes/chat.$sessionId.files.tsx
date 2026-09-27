@@ -65,10 +65,10 @@ import { useChatStore } from "@/lib/use-chat-store";
 export const Route = createFileRoute("/chat/$sessionId/files")({
   head: () => ({
     meta: [
-      { title: "File Manager — WenGPT" },
-      { name: "description", content: "File yang dibuat WenGPT di semua sesi." },
-      { property: "og:title", content: "File Manager — WenGPT" },
-      { property: "og:description", content: "File yang dibuat WenGPT di semua sesi." },
+      { title: "File Manager — WenGPT Prime" },
+      { name: "description", content: "File yang dibuat WenGPT Prime di semua sesi." },
+      { property: "og:title", content: "File Manager — WenGPT Prime" },
+      { property: "og:description", content: "File yang dibuat WenGPT Prime di semua sesi." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
