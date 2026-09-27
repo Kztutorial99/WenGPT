@@ -11,20 +11,22 @@
   --color-accent: var(--accent); --color-accent-foreground: var(--accent-foreground); --color-destructive: var(--destructive); --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border); --color-input: var(--input); --color-ring: var(--ring); --color-success: var(--success);
   --font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif; --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
-  --shadow-panel: 0 24px 65px -36px oklch(0 0 0 / .95); --shadow-user: 0 12px 28px -18px oklch(.56 .21 25 / .65);
+  --shadow-panel: 0 18px 48px -30px oklch(0 0 0 / .95); --shadow-user: 0 12px 28px -18px oklch(.56 .21 25 / .65);
+  --color-grid: var(--grid); --color-brand-line: var(--brand-line);
 }
 :root, .dark {
-  --radius: .625rem; --background: oklch(.125 .012 24); --foreground: oklch(.95 .008 25); --card: oklch(.17 .014 24); --card-foreground: oklch(.95 .008 25);
-  --popover: oklch(.17 .014 24); --popover-foreground: oklch(.95 .008 25); --primary: oklch(.61 .215 25); --primary-foreground: oklch(.98 .006 25);
-  --secondary: oklch(.21 .014 24); --secondary-foreground: oklch(.92 .008 25); --muted: oklch(.205 .012 24); --muted-foreground: oklch(.68 .018 25);
-  --accent: oklch(.245 .035 24); --accent-foreground: oklch(.96 .008 25); --destructive: oklch(.65 .23 25); --destructive-foreground: oklch(.98 .006 25);
-  --border: oklch(.29 .02 24); --input: oklch(.25 .018 24); --ring: oklch(.61 .215 25); --success: oklch(.72 .16 150);
+  --radius: .625rem; --background: oklch(.115 .019 24); --foreground: oklch(.97 .006 25); --card: oklch(.155 .024 24); --card-foreground: oklch(.97 .006 25);
+  --popover: oklch(.16 .023 24); --popover-foreground: oklch(.97 .006 25); --primary: oklch(.62 .245 26); --primary-foreground: oklch(.99 .003 25);
+  --secondary: oklch(.2 .027 24); --secondary-foreground: oklch(.94 .008 25); --muted: oklch(.205 .022 24); --muted-foreground: oklch(.71 .012 25);
+  --accent: oklch(.245 .047 24); --accent-foreground: oklch(.98 .006 25); --destructive: oklch(.68 .22 25); --destructive-foreground: oklch(.98 .006 25);
+  --border: oklch(.3 .055 24); --input: oklch(.27 .048 24); --ring: oklch(.62 .245 26); --success: oklch(.72 .16 150);
+  --grid: oklch(.49 .13 25 / .13); --brand-line: oklch(.58 .19 26 / .45);
 }
 @layer base {
   * { border-color: var(--color-border); }
   html { font-family: var(--font-sans); }
   html, body { width: 100%; max-width: 100%; height: 100%; overscroll-behavior: none; }
-  body { min-width: 0; overflow: hidden; color: var(--color-foreground); background: var(--color-background); background-image: radial-gradient(55rem 34rem at 50% -18%, oklch(.48 .13 24 / .14), transparent 72%); background-attachment: fixed; }
+  body { min-width: 0; overflow: hidden; color: var(--color-foreground); background: var(--color-background); }
   ::selection { background: oklch(.61 .215 25 / .3); }
   button, a, [role="button"] { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   button, a { transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease, transform 100ms ease; }
@@ -33,7 +35,12 @@
   @media (hover: none) { button:hover, a:hover, [role="button"]:hover { background-color: initial; } }
   ::-webkit-scrollbar { width: 8px; height: 8px; } ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; } ::-webkit-scrollbar-track { background: transparent; }
 }
-@utility brand-mark { display: grid; place-items: center; flex-shrink: 0; border: 1px solid var(--border); border-radius: .4rem; color: var(--primary); background: color-mix(in oklab, var(--card) 90%, transparent); box-shadow: 0 10px 28px -18px oklch(.61 .215 25 / .7); }
+@utility brand-mark { display: grid; place-items: center; flex-shrink: 0; border: 1px solid var(--brand-line); border-radius: .4rem; color: var(--primary); background: color-mix(in oklab, var(--card) 90%, transparent); box-shadow: 0 10px 28px -18px oklch(.61 .215 25 / .7); }
+@utility cyber-grid {
+  background-image: linear-gradient(to right, var(--grid) 1px, transparent 1px), linear-gradient(to bottom, var(--grid) 1px, transparent 1px), linear-gradient(to bottom, oklch(.27 .07 25 / .18), transparent 65%);
+  background-size: 70px 70px, 70px 70px, 100% 100%;
+  background-position: center top;
+}
 @utility wengpt-markdown {
   overflow-wrap: anywhere; word-break: normal;
   & > * + * { margin-top: .85rem; }

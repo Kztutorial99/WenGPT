@@ -209,16 +209,19 @@ function Chat() {
   return (
     <main
       style={box}
-      className="chat-shell fixed inset-x-0 top-0 flex h-dvh min-w-0 flex-col overflow-hidden bg-background text-foreground"
+      className="chat-shell cyber-grid fixed inset-x-0 top-0 flex h-dvh min-w-0 flex-col overflow-hidden bg-background text-foreground"
     >
-      <header className="z-20 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-border/60 bg-background/86 px-3 py-2.5 backdrop-blur-xl sm:px-6">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <span className="brand-mark">
+      <header className="z-20 mx-2 mt-2 flex shrink-0 flex-col overflow-hidden rounded-2xl border border-brand-line bg-card/95 backdrop-blur-xl sm:mx-5 sm:mt-4 sm:flex-row sm:items-center sm:justify-between sm:px-4 sm:py-2">
+        <div className="flex min-w-0 items-center justify-center gap-2.5 px-3 py-2.5 sm:justify-start sm:px-0 sm:py-0">
+          <span className="brand-mark size-8">
             <Bot className="size-4" />
           </span>
-          <h1 className="truncate text-sm font-semibold">WenGPT Prime</h1>
+          <h1 className="flex min-w-0 items-center gap-2 text-sm font-semibold sm:text-base">
+            <span>WenGPT</span>
+            <span className="rounded-md border border-brand-line px-2 py-0.5 text-primary">Prime</span>
+          </h1>
         </div>
-        <div className="flex items-center">
+        <div className="flex items-center justify-center border-t border-border/60 px-1 py-0.5 sm:justify-end sm:border-0 sm:p-0">
           <AppNav sessionId={sessionId} />
           <Button
             variant="ghost"
@@ -241,11 +244,9 @@ function Chat() {
               <span className="brand-mark mb-5 size-12">
                 <Bot className="size-5" />
               </span>
-              <h2 className="text-balance text-2xl font-semibold sm:text-3xl">
-                Mau mengerjakan apa hari ini?
-              </h2>
+              <h2 className="text-balance text-2xl font-semibold sm:text-3xl">WenGPT <span className="text-primary">Prime</span></h2>
               <p className="mt-2 max-w-md text-pretty text-sm leading-6 text-muted-foreground">
-                Ngobrol, membuat file, atau menjalankan pekerjaan langsung di sandbox sesi ini.
+                Mau mengerjakan apa hari ini?
               </p>
               <div className="mt-8 grid w-full max-w-xl grid-cols-1 gap-2 sm:grid-cols-2">
                 {STARTERS.map((starter) => (
@@ -372,7 +373,7 @@ function Chat() {
           aria-label="Kembali ke pesan terbaru"
         />
       </Conversation>
-      <footer className="relative z-20 shrink-0 border-t border-border/50 bg-background/88 px-3 pt-3 pb-[max(.75rem,env(safe-area-inset-bottom))] backdrop-blur-xl sm:px-6">
+       <footer className="relative z-20 shrink-0 border-t border-border/70 bg-background/95 px-3 pt-3 pb-[max(.75rem,env(safe-area-inset-bottom))] backdrop-blur-xl sm:px-6">
         {uploadError && (
           <p role="alert" className="mx-auto mb-2 max-w-3xl text-xs text-destructive">
             {uploadError}
@@ -403,7 +404,7 @@ function Chat() {
             )
           }
           onSubmit={({ text, files }) => submit(text, files)}
-          className="mx-auto w-full max-w-3xl [&_[data-slot=input-group]]:overflow-hidden [&_[data-slot=input-group]]:rounded-2xl [&_[data-slot=input-group]]:border-border/75 [&_[data-slot=input-group]]:bg-card/72 [&_[data-slot=input-group]]:shadow-panel [&_[data-slot=input-group]]:focus-within:border-ring/60"
+           className="mx-auto w-full max-w-3xl [&_[data-slot=input-group]]:overflow-hidden [&_[data-slot=input-group]]:rounded-2xl [&_[data-slot=input-group]]:border-brand-line [&_[data-slot=input-group]]:bg-card [&_[data-slot=input-group]]:shadow-panel [&_[data-slot=input-group]]:focus-within:border-ring"
         >
           <AttachmentHeader />
           <PromptInputTextarea
