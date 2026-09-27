@@ -32,6 +32,8 @@ export type ToolRun = {
     reason?: string;
     query?: string;
     url?: string;
+    port?: number;
+    items?: { text?: string; done?: boolean }[];
     secrets?: { name: string; service?: string }[];
   };
   output?: ToolOut;

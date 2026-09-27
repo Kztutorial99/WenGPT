@@ -277,6 +277,13 @@ function RunItem({ run, number, sessionId, live }: { run: ToolRun; number: numbe
   const failed = !!output && ((output.exitCode ?? 0) !== 0 || output.ok === false);
   const command = run.name === "run_command";
   const download = run.name === "download_file";
+  const readF = run.name === "read_file";
+  const editF = run.name === "edit_file";
+  const listF = run.name === "list_files";
+  const searchC = run.name === "search_code";
+  const preview = run.name === "preview_app";
+  const todoT = run.name === "todo";
+  const itemLabel = readF ? "Baca file" : editF ? "Edit file" : listF ? "Lihat struktur" : searchC ? "Cari kode" : preview ? "Pratinjau aplikasi" : todoT ? "Checklist" : null;
   const out = output as (typeof output & { files?: { name?: string; path?: string }[] }) | undefined;
   const baseName = (v: unknown) => {
     const raw = (String(v ?? "").split("?")[0] ?? "").split("/").filter(Boolean).pop() ?? "";
@@ -287,6 +294,12 @@ function RunItem({ run, number, sessionId, live }: { run: ToolRun; number: numbe
     : [];
   const input = command
     ? String(run.input.command ?? "")
+    : searchC
+      ? String(run.input.query ?? "")
+      : todoT
+        ? ((run.input.items as { text?: string }[] | undefined) ?? []).map((i) => i.text).filter(Boolean).join(", ")
+        : readF || editF || listF || preview
+          ? String(run.input.path ?? run.input.port ?? output?.path ?? output?.url ?? "")
     : download
       ? fileNames.join(", ") || baseName(run.input.url) || String(run.input.url ?? "Menyiapkan unduhan…")
       : String(run.input.path ?? output?.path ?? "") || "Menyiapkan file…";
@@ -311,7 +324,7 @@ function RunItem({ run, number, sessionId, live }: { run: ToolRun; number: numbe
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
         <span className="font-mono">{number}.</span>
         {command ? <Terminal className="size-3.5" /> : <FileText className="size-3.5" />}
-        <span>{command ? "Terminal" : download ? `Unduh ${kindLabel}` : `Simpan ${kindLabel}`}</span>
+        <span>{command ? "Terminal" : itemLabel ?? (download ? `Unduh ${kindLabel}` : `Simpan ${kindLabel}`)}</span>
         <span>·</span>
         <span className={failed || stopped ? "text-destructive" : output ? "text-success" : "text-warning"}>
           {stopped ? "Terhenti" : !output ? <>Berjalan<span className="inline-block w-4 animate-pulse">...</span></> : failed ? "Gagal" : "Selesai"}

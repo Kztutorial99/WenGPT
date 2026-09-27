@@ -73,6 +73,25 @@ Kamu juga agen pembuat aplikasi seperti Replit Agent, Lovable, Cursor, Windsurf,
 Alat tambahan untuk kode:
 - list_files: lihat struktur proyek. read_file: baca file dengan nomor baris. edit_file: ganti potongan teks persis (hemat, untuk perubahan kecil). write_file: buat file baru atau tulis ulang file yang berubah besar. run_command: install, jalankan, uji, grep/rg untuk mencari kode. preview_app: setelah server dev jalan, buat link pratinjau supaya pengguna bisa membuka aplikasinya di browser (sementara, bukan deploy); berikan link itu sebagai link markdown.
 
+[KEAMANAN SANDBOX - DILARANG DILANGGAR]
+- Kamu hanya boleh bekerja di folder kerja /home/user (proyek di /home/user/projects). Dilarang baca/tulis file di luar itu.
+- Dilarang keras membaca kredensial sistem: /etc/shadow, /etc/passwd, ~/.ssh, ~/.aws, /proc/*/environ, dan file .env milik sistem. Perintah seperti itu otomatis ditolak.
+- Dilarang pakai sudo (kecuali install package via apt-get) dan dilarang mengubah pengaturan sistem.
+- Internet boleh dipakai untuk install package dan mengunduh yang diminta pengguna; dilarang mengirim token/secret pengguna ke layanan yang tidak diminta.
+- Setiap perintah wajib jelas folder kerjanya (cwd). Perintah biasa maks 2 menit, install/build maks 5 menit; server dev wajib di background.
+
+WAJIB BACA/INSPEKSI DULU SEBELUM MENGUBAH:
+- File apa pun (kode, package.json, tsconfig, config vite/tailwind, dll) -> read_file dulu. edit_file/write_file akan menolak menimpa file lama yang belum dibaca.
+- Skema database -> inspeksi dulu (daftar tabel / .schema) sebelum CREATE/ALTER/DROP.
+- Sebelum menjalankan perintah -> tentukan cwd-nya.
+
+DEFINISI SELESAI (jangan berhenti hanya karena file sudah dibuat):
+Sebelum bilang selesai, validasi dan tampilkan checklist di jawaban akhir; centang hanya yang benar-benar lulus, tandai jujur yang belum:
+[ ] proyek dibuat  [ ] dependency terinstall tanpa error  [ ] database dibuat + query tes jalan  [ ] API dites via curl (status & isi)  [ ] frontend jalan dan halaman kebuka  [ ] build/typecheck/lint lolos  [ ] log server/error console dicek  [ ] link pratinjau bisa dibuka  [ ] download file sukses & valid  [ ] file tersimpan & dibaca ulang
+
+ALUR KERJA AGEN:
+Pahami request -> list_files (lihat struktur) -> todo (buat checklist) -> read_file file relevan -> edit_file/write_file -> install dependency -> run/build/test -> baca error -> perbaiki (maks 3 percobaan untuk error yang sama) -> preview_app -> validasi checklist -> laporan akhir.
+
 Alur kerja (loop agen):
 1. Pahami: untuk permintaan yang ambigu atau besar, tanyakan 1-3 hal penting dulu (tujuan, fitur utama, bahasa/framework) ATAU usulkan rencana singkat. Untuk permintaan jelas dan kecil, langsung kerjakan.
 2. Kumpulkan konteks: di proyek yang sudah ada, jalankan list_files lalu read_file file terkait SEBELUM mengubah. Jangan pernah mengedit file yang belum dibaca. Jangan menebak isi file, nama fungsi, atau API.
@@ -258,6 +277,24 @@ async function resolveAiBaseUrlUncached(): Promise<string> {
   return fallback;
 }
 
+const SANDBOX_HOME = "/home/user";
+const FORBIDDEN_PATHS = ["/etc/shadow", "/etc/passwd", "/etc/sudoers", "/root/.ssh", "/root/.aws", "/home/user/.ssh", "/home/user/.aws", "/proc/", "/sys/"];
+const FORBIDDEN_CMD = /\b(cat|head|tail|less|more|strings)\s+[^|]*\/(etc\/(shadow|passwd)|root\/)|\/proc\/[0-9*]+\/environ|\.ssh\b|\.aws\b|sudo\b(?!\s+apt-get)/;
+
+function sandboxPath(raw: string): string | { error: string } {
+  const clean = raw.trim().replace(/^~\/?/, "");
+  const p = clean.startsWith("/") ? clean : `${SANDBOX_HOME}/${clean.replace(/^\.\//, "")}`;
+  const parts = p.split("/");
+  if (parts.includes("..")) return { error: "Path tidak boleh memakai .." };
+  if (!p.startsWith(SANDBOX_HOME)) return { error: "Akses di luar folder kerja sandbox ditolak" };
+  if (FORBIDDEN_PATHS.some((f) => p.startsWith(f))) return { error: "Path ini berisi kredensial sistem, akses ditolak" };
+  return p;
+}
+
+function checkCommand(command: string): string | null {
+  if (FORBIDDEN_CMD.test(command)) return "Perintah ini menyentuh kredensial/area sistem yang diblokir";
+  return null;
+}
 const clip = (s: string, n = 6000) =>
   s.length > n ? s.slice(0, n) + `\n...[dipotong ${s.length - n} karakter]` : s;
 
@@ -513,6 +550,8 @@ export const Route = createFileRoute("/api/chat")({
         };
 
         let searchCalls = 0;
+        const readFiles = new Set<string>();
+        const todoState: { items: { text: string; done: boolean }[] } = { items: [] };
         const tools = {
            web_search: tool({
              description: `Cari informasi terbaru di internet. Tanggal hari ini ${today} (Makassar). Pakai tahun berjalan untuk info terbaru. Hasil langsung dikembalikan tanpa file.`,
@@ -546,6 +585,8 @@ export const Route = createFileRoute("/api/chat")({
               command: z.string().describe("Perintah bash yang akan dijalankan"),
             }),
             execute: async ({ command }) => {
+              const blocked = checkCommand(command);
+              if (blocked) return { ok: false, exitCode: 126, error: blocked };
               try {
                 const sb = await getSandbox();
                 const r = await sb.commands.run(command, {
@@ -647,12 +688,11 @@ export const Route = createFileRoute("/api/chat")({
             execute: async ({ path, content }) => {
               try {
                 const sb = await getSandbox();
-                const clean = path.trim().replace(/^~\/?/, "").replace(/^\.\//, "");
-                const p = clean.startsWith("/home/user")
-                  ? clean
-                  : clean.startsWith("/root/") || clean.startsWith("/tmp/") === false && clean.startsWith("/") === false
-                    ? `/home/user/${clean.replace(/^\/root\//, "")}`
-                    : clean;
+                const p = sandboxPath(path);
+                if (typeof p !== "string") return { ok: false, error: p.error };
+                if (content.length > 2_000_000) return { ok: false, error: "File terlalu besar (maks 2 MB)." };
+                if (await sb.files.exists(p).catch(() => false) && !readFiles.has(p))
+                  return { ok: false, path: p, error: "File ini sudah ada dan belum dibaca. Baca dulu dengan read_file sebelum menimpa." };
                 await sb.commands.run(`mkdir -p "$(dirname '${p.replace(/'/g, "'\\''")}')"`, { cwd: "/home/user" }).catch(() => null);
                 await sb.files.write(p, content);
                 return { ok: true, path: p, bytes: content.length };
@@ -672,7 +712,9 @@ export const Route = createFileRoute("/api/chat")({
             execute: async ({ path, start, end }) => {
               try {
                 const sb = await getSandbox();
-                const p = path.startsWith("/") ? path : `/home/user/${path.replace(/^\.\//, "")}`;
+                const p = sandboxPath(path);
+                if (typeof p !== "string") return { ok: false, error: p.error };
+                readFiles.add(p);
                 const text = await sb.files.read(p);
                 const lines = text.split("\n");
                 const a = Math.max(1, start ?? 1);
@@ -699,7 +741,9 @@ export const Route = createFileRoute("/api/chat")({
             execute: async ({ path, old_text, new_text, replace_all }) => {
               try {
                 const sb = await getSandbox();
-                const p = path.startsWith("/") ? path : `/home/user/${path.replace(/^\.\//, "")}`;
+                const p = sandboxPath(path);
+                if (typeof p !== "string") return { ok: false, error: p.error };
+                if (!readFiles.has(p)) return { ok: false, path: p, error: "Baca file ini dulu dengan read_file sebelum mengeditnya." };
                 const text = await sb.files.read(p);
                 const count = old_text ? text.split(old_text).length - 1 : 0;
                 if (count === 0)
@@ -721,7 +765,9 @@ export const Route = createFileRoute("/api/chat")({
             execute: async ({ path, depth }) => {
               try {
                 const sb = await getSandbox();
-                const root = (path ?? "/home/user").replace(/'/g, "");
+                const rp = sandboxPath(path ?? "/home/user");
+                if (typeof rp !== "string") return { ok: false, error: rp.error };
+                const root = rp.replace(/'/g, "");
                 const d = Math.min(Math.max(depth ?? 3, 1), 6);
                 const r = await sb.commands.run(
                   `cd '${root}' && find . -maxdepth ${d} \\( -name node_modules -o -name .git -o -name dist -o -name build -o -name .venv -o -name venv -o -name __pycache__ -o -name .next \\) -prune -o -print | sort | head -400`,
@@ -731,6 +777,35 @@ export const Route = createFileRoute("/api/chat")({
               } catch (err) {
                 return { ok: false, error: err instanceof Error ? err.message : String(err) };
               }
+            },
+          }),
+          search_code: tool({
+            description: "Cari teks/nama fungsi di seluruh proyek sandbox (rekursif, tanpa node_modules/.git). Kembalikan baris dengan nomor baris.",
+            inputSchema: z.object({ query: z.string(), path: z.string().optional() }),
+            execute: async ({ query, path }) => {
+              try {
+                const sb = await getSandbox();
+                const rp = sandboxPath(path ?? "/home/user");
+                if (typeof rp !== "string") return { ok: false, error: rp.error };
+                const q = query.replace(/'/g, "'\\''");
+                const r = await sb.commands.run(
+                  `cd '${rp.replace(/'/g, "")}' && grep -rnI --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=dist --exclude-dir=build -m 200 '${q}' . | head -200`,
+                  { timeoutMs: 30_000 },
+                );
+                return { ok: true, query, matches: clip(r.stdout, 20000) || "(tidak ada hasil)" };
+              } catch (err) {
+                return { ok: false, error: err instanceof Error ? err.message : String(err) };
+              }
+            },
+          }),
+          todo: tool({
+            description: "Tampilkan/perbarui checklist langkah kerja (rencana tugas). Kirim daftar penuh setiap kali; tandai selesai dengan done=true. Wajib dipakai untuk tugas coding multi-langkah.",
+            inputSchema: z.object({
+              items: z.array(z.object({ text: z.string(), done: z.boolean().optional() })),
+            }),
+            execute: async ({ items }) => {
+              todoState.items = items.map((i) => ({ text: i.text, done: !!i.done }));
+              return { ok: true, done: todoState.items.filter((i) => i.done).length, total: todoState.items.length, items: todoState.items };
             },
           }),
           preview_app: tool({
