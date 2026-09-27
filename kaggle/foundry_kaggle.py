@@ -90,18 +90,34 @@ if not ollama_ok() and not start_ollama():
 print("OK Ollama jalan")
 
 # %% [code]
-# CELL 4 - MODEL
-ACTIVE_MODEL = MODEL
+# CELL 4 - MODEL (pakai file GGUF dari dataset cache; TIDAK pernah ollama pull)
+MMPROJ_FILE = "mmproj-Qwen3.8-27B-Q8_0.gguf"   # file penglihatan (gambar/screenshot)
+
 def ollama_has(n):
     return subprocess.run(["ollama", "show", n], capture_output=True, env=os.environ.copy()).returncode == 0
-if not ollama_has(MODEL):
-    if subprocess.run(["ollama", "pull", MODEL], env=os.environ.copy()).returncode != 0:
-        from huggingface_hub import hf_hub_download
-        path = hf_hub_download(repo_id=HF_REPO, filename=HF_FILE)
-        open("/kaggle/working/Modelfile", "w").write(f"FROM {path}\nPARAMETER num_ctx 8192\n")
-        if subprocess.run(["ollama", "create", "rvn27b", "-f", "/kaggle/working/Modelfile"], env=os.environ.copy()).returncode != 0:
-            raise RuntimeError("Gagal membuat model rvn27b")
-        ACTIVE_MODEL = "rvn27b"
+
+def find_or_download(filename):
+    # 1) dari dataset cache 2) dari sisa sesi sebelumnya 3) download SEKALI dari Hugging Face
+    for base in [CACHE, "/kaggle/working"]:
+        if base:
+            hit = glob.glob(f"{base}/gguf/{filename}") + glob.glob(f"{base}/**/{filename}", recursive=True)
+            if hit: return hit[0]
+    print(f"Download {filename} (sekali saja - nanti pindahkan ke dataset {DATASET}/gguf/ biar tidak download lagi)...")
+    from huggingface_hub import hf_hub_download
+    path = hf_hub_download(repo_id=HF_REPO, filename=filename)
+    os.makedirs("/kaggle/working/gguf", exist_ok=True)
+    dest = f"/kaggle/working/gguf/{filename}"
+    if not os.path.exists(dest): shutil.copy(path, dest)
+    return dest
+
+ACTIVE_MODEL = "rvn27b"
+if not ollama_has(ACTIVE_MODEL):
+    gguf = find_or_download(HF_FILE)
+    mmproj = find_or_download(MMPROJ_FILE)
+    open("/kaggle/working/Modelfile", "w").write(
+        f"FROM {gguf}\nMMPROJ {mmproj}\nPARAMETER num_ctx 8192\n")
+    if subprocess.run(["ollama", "create", ACTIVE_MODEL, "-f", "/kaggle/working/Modelfile"], env=os.environ.copy()).returncode != 0:
+        raise RuntimeError("Gagal membuat model rvn27b")
 print("Model:", ACTIVE_MODEL)
 print("Memanaskan model ke GPU...")
 requests.post(f"{OLLAMA_URL}/api/generate", json={"model": ACTIVE_MODEL, "prompt": "Hi", "stream": False, "keep_alive": -1}, timeout=900).raise_for_status()

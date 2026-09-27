@@ -30,3 +30,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Jangan pernah commit file env berisi credential
+.env
+.env.*
