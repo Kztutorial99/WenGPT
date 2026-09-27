@@ -318,10 +318,10 @@ function Chat() {
                   )}
                   {message.parts.map((part, index) =>
                     part.type === "text" ? (
-                      active || index < lastToolIndex ? null :
+                      index < lastToolIndex ? null :
                       <MessageResponse
                         key={`${message.id}-${index}`}
-                         isAnimating={false}
+                         isAnimating={active}
                         className="wengpt-markdown min-w-0 max-w-full"
                       >
                         {part.text.replace(/\(Perintah\s*—\s*exit \?\s*\)\s*/g, "")}
