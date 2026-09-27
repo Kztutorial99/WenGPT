@@ -267,7 +267,7 @@ async function firecrawl(path: string, payload: unknown, timeout: number) {
   throw new Error("Firecrawl gagal setelah dicoba ulang.");
 }
 async function searchFirecrawl(query: string, max: number) {
-  const data = await firecrawl("search", { query, limit: max, country: "ID" }, 30_000);
+  const data = await firecrawl("search", { query, limit: max }, 30_000);
   if (!data) throw new Error("Firecrawl belum aktif");
   const list = Array.isArray(data.data)
     ? data.data
