@@ -696,12 +696,18 @@ export function loadFiles(sessionId: string): SavedFile[] {
   const map = new Map<string, SavedFile>();
   for (const checkpoint of loadCheckpoints(sessionId))
     for (const run of checkpoint.runs) {
-      if (run.name !== "write_file" || !run.input.path) continue;
+      const edited =
+        run.name === "edit_file" &&
+        run.output?.ok !== false &&
+        typeof (run.output as { content?: unknown } | undefined)?.content === "string";
+      if ((run.name !== "write_file" && !edited) || !run.input.path) continue;
       const path = normalizePath(run.input.path);
       map.delete(path);
       map.set(path, {
         path,
-        content: String(run.input.content ?? ""),
+        content: edited
+          ? String((run.output as { content?: unknown }).content)
+          : String(run.input.content ?? ""),
         runId: run.id,
         ask: checkpoint.ask,
         failed: run.output?.ok === false,

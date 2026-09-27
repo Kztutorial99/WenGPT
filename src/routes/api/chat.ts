@@ -67,6 +67,33 @@ EFISIEN: begitu hasil yang benar/relevan sudah ditemukan (dari cuplikan web_sear
 - download_file: WAJIB dipakai setiap kali pengguna minta download/unduh/simpan file APA PUN: video, audio, gambar/foto, PDF, dokumen, zip, apk, dll. Langkah: (1) jika belum ada URL, cari dengan web_search lalu ambil URL spesifik (halaman video/postingan, atau URL file/gambar langsung), (2) langsung panggil download_file dengan URL itu dan kind yang sesuai (video/audio/image/file/auto). Untuk gambar dari halaman web, pakai URL gambar langsung (misal og:image dari read_webpage) atau URL halaman postingan (Instagram/X/Pinterest). JANGAN menulis script, file .txt/.html, atau curl halaman untuk "mencari cara download". Jika gagal, boleh coba maksimal 1 URL lain, lalu jelaskan alasannya. Jika berhasil, sebutkan nama file, ukuran, serta bilang file ada di File Manager folder downloads, pastikan validasi check dahulu bahwa file/video yang di download sdh benar dan sdh valid ada di filemanager sblm bilang selesai.
 - write_file: tulis file ke sandbox. File yang ditulis dengan write_file otomatis muncul di menu File Manager pengguna.
 
+[MODE CODING AGENT - BIKIN APLIKASI & NULIS KODE]
+Kamu juga agen pembuat aplikasi seperti Replit Agent, Lovable, Cursor, Windsurf, Devin, Claude Code, v0, dan Bolt. Kamu bisa membuat proyek dari nol, membaca dan mengedit file proyek, memasang package, membuat database, menjalankan dan menguji aplikasi di sandbox. Deploy/publish BELUM didukung: jangan deploy, jangan janji link online; kalau diminta, bilang fitur deploy belum tersedia dan aplikasi hanya jalan di sandbox.
+
+Alat tambahan untuk kode:
+- list_files: lihat struktur proyek. read_file: baca file dengan nomor baris. edit_file: ganti potongan teks persis (hemat, untuk perubahan kecil). write_file: buat file baru atau tulis ulang file yang berubah besar. run_command: install, jalankan, uji, grep/rg untuk mencari kode. preview_app: setelah server dev jalan, buat link pratinjau supaya pengguna bisa membuka aplikasinya di browser (sementara, bukan deploy); berikan link itu sebagai link markdown.
+
+Alur kerja (loop agen):
+1. Pahami: untuk permintaan yang ambigu atau besar, tanyakan 1-3 hal penting dulu (tujuan, fitur utama, bahasa/framework) ATAU usulkan rencana singkat. Untuk permintaan jelas dan kecil, langsung kerjakan.
+2. Kumpulkan konteks: di proyek yang sudah ada, jalankan list_files lalu read_file file terkait SEBELUM mengubah. Jangan pernah mengedit file yang belum dibaca. Jangan menebak isi file, nama fungsi, atau API.
+3. Rencanakan: untuk tugas multi-langkah, tulis daftar langkah singkat (checklist) di awal, lalu kerjakan satu per satu dan tandai yang selesai.
+4. Eksekusi: satu langkah, satu tujuan. Setelah tiap tool, baca hasilnya lalu tentukan langkah berikut.
+5. Verifikasi: jalankan build/lint/test atau skrip nyata setelah perubahan. Baca exit code dan error. Jangan bilang "beres" sebelum terbukti jalan.
+6. Laporkan: ringkas apa yang dibuat/diubah, cara menjalankannya, dan yang belum selesai.
+
+Aturan kode:
+- Default stack jika pengguna tidak menentukan: web = Vite + React + TypeScript + Tailwind; backend/API = Node.js (Express) atau Python (FastAPI); database = SQLite (file lokal, via better-sqlite3 atau sqlite3 Python). Pakai PostgreSQL/MySQL hanya jika diminta dan bisa dipasang di sandbox.
+- Proyek baru dibuat di /home/user/projects/<nama-proyek>. Pakai scaffold resmi non-interaktif (mis. \`npm create vite@latest app -- --template react-ts\`, lalu \`npm install\`). Semua perintah harus non-interaktif (pakai -y / --yes); jangan jalankan perintah yang menunggu input.
+- Server dev jalan terus: jalankan di background dengan log, contoh \`nohup npm run dev -- --host 0.0.0.0 --port 5173 > dev.log 2>&1 &\`, tunggu beberapa detik, lalu cek dengan \`curl -s localhost:5173 | head\` dan \`tail dev.log\`. Jangan jalankan server di foreground (akan timeout).
+- Perubahan minimal dan fokus: ubah hanya yang diminta, jangan refactor atau ganti gaya kode tanpa alasan. Ikuti pola, gaya, dan library yang sudah dipakai proyek. Cek package.json/requirements.txt sebelum memakai library; install dulu kalau belum ada.
+- Kode harus lengkap dan langsung bisa jalan: import lengkap, tanpa placeholder "// ...", tanpa TODO palsu, tanpa data rahasia ditulis di kode (pakai variabel lingkungan / .env).
+- File kecil dan modular: pecah komponen/modul yang terlalu besar. Nama file dan fungsi deskriptif.
+- Database: buat skema dengan file migrasi/SQL yang jelas (CREATE TABLE ...), isi data contoh jika perlu, dan uji query sungguhan. Jangan hapus data atau drop tabel tanpa izin pengguna.
+- Debugging: baca error lengkap, cari akar masalah (bukan menambal gejala), perbaiki, uji ulang. Maksimal 3 kali percobaan untuk error yang sama; kalau masih gagal, coba pendekatan lain atau jelaskan kendala dengan jujur.
+- Tindakan berisiko (rm -rf, hapus database, overwrite banyak file, git push/force) hanya jika pengguna jelas meminta.
+- Jangan tampilkan seluruh isi file panjang di chat; cukup potongan penting. Kode yang ditulis ke file tidak perlu diulang di chat.
+- Jawaban akhir untuk tugas coding: 2-5 poin singkat (apa yang dibuat, file utama, cara jalankan/uji, catatan). Lokasi proyek ada di File Manager.
+
 Aturan:
 - Pakai tool HANYA jika memang perlu menjalankan/menguji sesuatu atau pengguna memintanya. Untuk obrolan biasa, jawab langsung.
 - Sebelum memanggil tool pertama, WAJIB kirim satu kalimat singkat tentang apa yang akan kamu kerjakan. Jangan membuat pengguna menatap layar kosong.
@@ -634,6 +661,95 @@ export const Route = createFileRoute("/api/chat")({
               }
             },
           }),
+          read_file: tool({
+            description:
+              "Baca isi file teks di sandbox dengan nomor baris. Pakai sebelum mengedit file yang sudah ada. Opsional start/end baris untuk file besar.",
+            inputSchema: z.object({
+              path: z.string(),
+              start: z.number().int().optional(),
+              end: z.number().int().optional(),
+            }),
+            execute: async ({ path, start, end }) => {
+              try {
+                const sb = await getSandbox();
+                const p = path.startsWith("/") ? path : `/home/user/${path.replace(/^\.\//, "")}`;
+                const text = await sb.files.read(p);
+                const lines = text.split("\n");
+                const a = Math.max(1, start ?? 1);
+                const b = Math.min(lines.length, end ?? Math.min(lines.length, a + 399));
+                const body = lines
+                  .slice(a - 1, b)
+                  .map((l, i) => `${a + i}: ${l}`)
+                  .join("\n");
+                return { ok: true, path: p, totalLines: lines.length, from: a, to: b, content: clip(body, 40000) };
+              } catch (err) {
+                return { ok: false, error: err instanceof Error ? err.message : String(err) };
+              }
+            },
+          }),
+          edit_file: tool({
+            description:
+              "Edit sebagian file yang sudah ada: ganti teks old_text (harus persis sama dan unik di file) dengan new_text. Lebih hemat daripada menulis ulang seluruh file. Baca file dulu dengan read_file.",
+            inputSchema: z.object({
+              path: z.string(),
+              old_text: z.string(),
+              new_text: z.string(),
+              replace_all: z.boolean().optional(),
+            }),
+            execute: async ({ path, old_text, new_text, replace_all }) => {
+              try {
+                const sb = await getSandbox();
+                const p = path.startsWith("/") ? path : `/home/user/${path.replace(/^\.\//, "")}`;
+                const text = await sb.files.read(p);
+                const count = old_text ? text.split(old_text).length - 1 : 0;
+                if (count === 0)
+                  return { ok: false, path: p, error: "old_text tidak ditemukan. Baca ulang file dengan read_file lalu salin teks persis." };
+                if (count > 1 && !replace_all)
+                  return { ok: false, path: p, error: `old_text muncul ${count} kali. Tambah konteks agar unik, atau set replace_all.` };
+                const next = replace_all ? text.split(old_text).join(new_text) : text.replace(old_text, () => new_text);
+                await sb.files.write(p, next);
+                return { ok: true, path: p, replaced: replace_all ? count : 1, content: next.length <= 200_000 ? next : undefined };
+              } catch (err) {
+                return { ok: false, error: err instanceof Error ? err.message : String(err) };
+              }
+            },
+          }),
+          list_files: tool({
+            description:
+              "Tampilkan struktur folder proyek di sandbox (tanpa node_modules, .git, dist, venv). Pakai untuk memahami proyek sebelum mengubahnya.",
+            inputSchema: z.object({ path: z.string().optional(), depth: z.number().int().optional() }),
+            execute: async ({ path, depth }) => {
+              try {
+                const sb = await getSandbox();
+                const root = (path ?? "/home/user").replace(/'/g, "");
+                const d = Math.min(Math.max(depth ?? 3, 1), 6);
+                const r = await sb.commands.run(
+                  `cd '${root}' && find . -maxdepth ${d} \\( -name node_modules -o -name .git -o -name dist -o -name build -o -name .venv -o -name venv -o -name __pycache__ -o -name .next \\) -prune -o -print | sort | head -400`,
+                  { timeoutMs: 20_000 },
+                );
+                return { ok: true, root, tree: clip(r.stdout, 20000) };
+              } catch (err) {
+                return { ok: false, error: err instanceof Error ? err.message : String(err) };
+              }
+            },
+          }),
+          preview_app: tool({
+            description:
+              "Buat link pratinjau publik (sementara) untuk aplikasi/server yang sedang jalan di sandbox pada port tertentu, seperti preview di Replit/Lovable. Pastikan server sudah jalan dengan --host 0.0.0.0 sebelum dipanggil.",
+            inputSchema: z.object({ port: z.number().int() }),
+            execute: async ({ port }) => {
+              try {
+                const sb = await getSandbox();
+                const check = await sb.commands
+                  .run(`curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:${port}`, { timeoutMs: 10_000 })
+                  .catch((e: { stdout?: string }) => ({ stdout: e?.stdout ?? "000" }));
+                const url = `https://${sb.getHost(port)}`;
+                return { ok: true, port, url, localStatus: check.stdout, catatan: "Link aktif selama sandbox hidup (~15 menit), bukan deploy permanen." };
+              } catch (err) {
+                return { ok: false, error: err instanceof Error ? err.message : String(err) };
+              }
+            },
+          }),
           request_secret: tool({
             description:
               "Tampilkan SATU form input aman untuk satu atau beberapa token sekaligus. Panggil sekali saja dengan semua token di array secrets. Nilai tidak pernah terlihat olehmu.",
@@ -741,7 +857,7 @@ export const Route = createFileRoute("/api/chat")({
            system: `${SYSTEM_PROMPT}\n\nTanggal saat ini (waktu Makassar, UTC+8): ${today}. Untuk permintaan info terbaru, cari dengan tahun berjalan dan cek tanggal sumber sebelum menjawab.`,
           messages: modelMessages,
           tools,
-          stopWhen: stepCountIs(24),
+          stopWhen: stepCountIs(50),
           abortSignal: request.signal,
           providerOptions: { openai: { reasoningEffort: (needsThink ? "medium" : "low") as never } },
         });
