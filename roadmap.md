@@ -35,8 +35,10 @@
 - [x] Saring teks bocor AI, info pemilik token, terminal tidak reset & izin folder; push
 - [x] Hasil cek secret masuk ke jawaban AI tanpa pesan; terminal lebih responsif; push
 - [x] Tampilkan proses berpikir AI sebagai panel kecil; push ke GitHub
-- [ ] Cek status deploy Vercel (menunggu konfirmasi deploy jalan)
 - [x] Hapus kunci Tavily dari secret & Vercel (tak dipakai)
-- [ ] Ganti web search ke Google Custom Search API (menunggu API key + Search Engine ID dari user)
 - [x] Perbaiki sumber pencarian, konteks tanggal terkini, dan penanganan halaman yang memblokir pembacaan
 - [x] Ringkas kartu situs serta tampilkan status selesai di bawah Linimasa
+- [x] Kaggle: cache dataset sudah memuat model+vision (mmproj); skrip pakai cache tanpa download ulang; push
+
+- [ ] Cek kenapa WenGPT belum dapat respons AI walau sesi Kaggle running (17 Sep 09:17 UTC)
+- [ ] Pastikan putaran watchdog berikutnya restart akun 3 (sesi hidup tapi AI mati, fail 1/2)

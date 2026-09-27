@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Bot, Globe, ChevronRight, FileText, GitBranch, Paperclip, Plus, X } from "lucide-react";
+import { Bot, Globe, ChevronRight, FileText, GitBranch, Image as ImageIcon, Paperclip, Plus, Video, X } from "lucide-react";
 import { AppNav } from "@/components/app-nav";
 import { AiDots, requestedSecrets, SecretSlider } from "@/components/secret-cards";
 import {
@@ -294,6 +294,32 @@ function Chat() {
                       </div>
                     ) : null,
                   )}
+                   {message.role === "user" && Boolean(message.files?.length) && (
+                     <div className="flex max-w-full flex-wrap gap-1.5 pt-1" aria-label="File terlampir">
+                       {message.files?.map((file, index) => {
+                         const Icon = file.mediaType.startsWith("image/")
+                           ? ImageIcon
+                           : file.mediaType.startsWith("video/") ? Video : FileText;
+                         return (
+                           <span
+                             key={`${file.name}-${index}`}
+                             title={file.name}
+                             className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md border border-primary-foreground/30 bg-primary-foreground/10 px-2 py-1 text-[11px] text-primary-foreground"
+                           >
+                             <Icon className="size-3.5 shrink-0" aria-hidden="true" />
+                             <span className="min-w-0 max-w-40 truncate">{file.name}</span>
+                             {typeof file.size === "number" && (
+                               <span className="shrink-0 opacity-75">
+                                 {file.size < 1024 * 1024
+                                   ? `${Math.max(1, Math.round(file.size / 1024))} KB`
+                                   : `${(file.size / (1024 * 1024)).toFixed(1)} MB`}
+                               </span>
+                             )}
+                           </span>
+                         );
+                       })}
+                     </div>
+                   )}
                   {!active && sources.length > 0 && <WebSources sources={sources} />}
                 </MessageContent>
               </Message>

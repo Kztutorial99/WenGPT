@@ -1,7 +1,6 @@
 # Watchdog Foundry: dijalankan GitHub Actions tiap 10 menit.
 # Per akun: (1) sesi Kaggle mati -> nyalakan ulang, (2) sesi hidup tapi AI tidak menjawab -> nyalakan ulang.
 import json, os, subprocess, sys, tempfile, time
-from datetime import datetime, timezone
 from urllib.parse import quote
 import requests
 

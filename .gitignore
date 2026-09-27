@@ -34,3 +34,7 @@ dist-ssr
 # Jangan pernah commit file env berisi credential
 .env
 .env.*
+
+# Python
+__pycache__/
+*.pyc
