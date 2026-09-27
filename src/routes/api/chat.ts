@@ -230,37 +230,54 @@ const hit = (title: string, url: string, snippet: string): WebHit | null => {
   try { site = new URL(url).hostname.replace(/^www\./, ""); } catch { return null; }
   return { title: decodeHtml(title).slice(0, 160), url, snippet: decodeHtml(snippet).slice(0, 320), site };
 };
-function relevantHit(result: WebHit, query: string) {
-  const terms = [...new Set(query.toLowerCase().match(/[\p{L}\p{N}]{4,}/gu) ?? [])]
-    .filter((word) => !/^(latest|newest|current|recent|update|version|terbaru|terkini|versi|pembaruan|history|sejarah|tahun|20\d{2})$/.test(word));
-  if (!terms.length) return true;
-  const title = result.title.toLowerCase();
-  return terms.filter((word) => title.includes(word)).length >= Math.min(2, terms.length);
-}
 // Firecrawl: pencarian + pembaca situs yang tembus JavaScript/anti-bot. Aktif bila FIRECRAWL_API_KEY ada.
 async function firecrawl(path: string, payload: unknown, timeout: number) {
   const key = process.env["FIRECRAWL_API_KEY"];
   if (!key) return null;
-  const res = await fetch(`https://api.firecrawl.dev/v2/${path}`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(timeout),
-  });
-  if (!res.ok) throw new Error(`Firecrawl ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (await res.json()) as any;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const res = await fetch(`https://api.firecrawl.dev/v2/${path}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(timeout),
+    });
+    if (res.ok) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (await res.json()) as any;
+    }
+    const message = (await res.text()).slice(0, 500);
+    if ((res.status === 429 || res.status >= 500) && attempt === 0) {
+      const retryHeader = Number(res.headers.get("retry-after"));
+      const retryFromBody = Number(message.match(/retry after (\d+)s/i)?.[1]);
+      const waitSeconds = Number.isFinite(retryHeader)
+        ? retryHeader
+        : Number.isFinite(retryFromBody)
+          ? retryFromBody
+          : 2;
+      await new Promise((resolve) => setTimeout(resolve, Math.min(Math.max(waitSeconds, 1), 20) * 1000));
+      continue;
+    }
+    if (res.status === 429) {
+      console.warn(`Firecrawl ${path} dibatasi setelah percobaan ulang: ${message}`);
+      throw new Error("Batas pencarian Firecrawl sedang penuh. Tunggu sekitar 20 detik lalu coba lagi.");
+    }
+    console.error(`Firecrawl ${path} gagal (${res.status}): ${message}`);
+    throw new Error(`Firecrawl ${res.status}: ${message}`);
+  }
+  throw new Error("Firecrawl gagal setelah dicoba ulang.");
 }
 async function searchFirecrawl(query: string, max: number) {
-  const data = await firecrawl("search", { query, limit: max, country: "ID" }, 15_000);
+  const data = await firecrawl("search", { query, limit: max, country: "ID" }, 30_000);
   if (!data) throw new Error("Firecrawl belum aktif");
-  const list = Array.isArray(data.data) ? data.data : (data.data?.web ?? []);
+  const list = Array.isArray(data.data)
+    ? data.data
+    : [...(data.data?.web ?? []), ...(data.data?.news ?? [])];
   const out: WebHit[] = [];
   for (const r of list) {
     const h = hit(r.title ?? r.url ?? "", r.url ?? "", r.description ?? "");
     if (h) out.push(h);
   }
-  if (!out.length) throw new Error("Firecrawl kosong");
+  if (!out.length) throw new Error("Firecrawl tidak mengembalikan hasil untuk kata kunci ini.");
   return out;
 }
 const searchCache = new Map<string, { at: number; results: WebHit[] }>();
@@ -275,9 +292,9 @@ async function webSearch(query: string, max = 6) {
   const cached = searchCache.get(key);
   if (cached && Date.now() - cached.at < 10 * 60_000) return cached.results;
   // Satu-satunya mesin pencari: Firecrawl (tembus JavaScript/anti-bot).
-  const results = await searchFirecrawl(freshQuery, max)
-    .then((r) => r.filter((result) => relevantHit(result, freshQuery)))
-    .catch(() => [] as WebHit[]);
+  // Firecrawl sudah mengurutkan hasil berdasarkan relevansi. Jangan menyaring
+  // ulang hanya dari judul karena hasil valid sering memakai sinonim atau judul singkat.
+  const results = await searchFirecrawl(freshQuery, max);
   if (results.length) searchCache.set(key, { at: Date.now(), results });
   return results;
 }
@@ -426,10 +443,10 @@ export const Route = createFileRoute("/api/chat")({
             inputSchema: z.object({ query: z.string().min(1).describe("Kata kunci pencarian yang spesifik") }),
             execute: async ({ query }) => {
               searchCalls += 1;
-              if (searchCalls > 4) return { ok: false, query, results: [], detail: "Batas pencarian tercapai. Jawab sekarang dengan info yang sudah ada." };
+              if (searchCalls > 2) return { ok: false, query, results: [], detail: "Batas pencarian tercapai. Jawab sekarang dengan info yang sudah ada." };
               try {
                  const results = await webSearch(query);
-                 return { ok: results.length > 0, query, results, ...(results.length ? {} : { detail: "Tidak ada hasil dari sumber yang tersedia. Jangan mengulang pencarian yang sama; jelaskan keterbatasannya." }) };
+                 return { ok: true, query, results };
               } catch (err) {
                 return { ok: false, query, results: [], error: err instanceof Error ? err.message : String(err) };
               }
