@@ -370,6 +370,13 @@ function Chat() {
                        })}
                      </div>
                    )}
+                  {message.role === "assistant" && !active && lastToolIndex >= 0 &&
+                    !message.parts.some((part, index) => part.type === "text" && index > lastToolIndex && part.text.trim()) &&
+                    !message.parts.some((part) => part.type === "cancelled") && (
+                      <p className="text-sm text-muted-foreground">
+                        Proses selesai. Lihat hasil lengkapnya di Linimasa{sources.length ? " atau sumber di bawah" : ""}.
+                      </p>
+                    )}
                   {!active && sources.length > 0 && <WebSources sources={sources} />}
                 </MessageContent>
               </Message>

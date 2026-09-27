@@ -137,13 +137,13 @@ function Timeline() {
                 entry.type === "think" ? (
                   <ThinkingItem key={entry.id} entry={entry} number={i + 1} active={!!active && i === entries.length - 1} />
                 ) : (
-                  <RunItem key={entry.id} run={entry.run} number={i + 1} sessionId={sessionId} />
+                  <RunItem key={entry.id} run={entry.run} number={i + 1} sessionId={sessionId} live={!!active} />
                 )
               ))}
             </ol>
             <p role="status" className={`ml-6 flex items-center gap-2 border-l-2 py-1 pl-4 text-xs font-medium ${active || pending ? "border-primary text-muted-foreground" : cancelled ? "border-destructive text-destructive" : "border-success text-success"}`}>
               {active || pending ? <span className="size-2 animate-pulse rounded-full bg-primary" /> : cancelled ? <CircleAlert className="size-4" /> : <Check className="size-4" />}
-              {active ? "Proses masih berjalan…" : pending ? "Ada langkah yang belum selesai" : cancelled ? "Proses dibatalkan" : "Linimasa selesai"}
+              {active ? "Proses masih berjalan…" : pending ? "Ada langkah yang terhenti" : cancelled ? "Proses dibatalkan" : "Linimasa selesai"}
             </p>
           </>
         )}
@@ -206,7 +206,13 @@ function ThinkingItem({ entry, number, active }: { entry: Extract<TimelineEntry,
         <span className="font-mono">{number}.</span>
         <ChevronRight className={`size-3.5 transition-transform ${expanded ? "rotate-90" : ""}`} />
         <Brain className="size-3.5" />
-        <span>{active ? "Sedang berpikir…" : "Proses berpikir"}</span>
+        <span>Proses berpikir</span>
+        <span>·</span>
+        {active ? (
+          <span className="text-primary">Berjalan<span className="inline-block w-4 animate-pulse">...</span></span>
+        ) : (
+          <span className="text-success">Selesai</span>
+        )}
         <span className="ml-auto">{formatTime(entry.at)}</span>
       </button>
       {expanded && (
@@ -265,12 +271,33 @@ function WebItem({ run, number }: { run: ToolRun; number: number }) {
     </li>
   );
 }
-function RunItem({ run, number, sessionId }: { run: ToolRun; number: number; sessionId: string }) {
+function RunItem({ run, number, sessionId, live }: { run: ToolRun; number: number; sessionId: string; live: boolean }) {
   if (run.name === "web_search" || run.name === "read_webpage") return <WebItem run={run} number={number} />;
   const output = run.output;
   const failed = !!output && ((output.exitCode ?? 0) !== 0 || output.ok === false);
   const command = run.name === "run_command";
-  const input = command ? String(run.input.command ?? "") : String(run.input.path ?? "file");
+  const download = run.name === "download_file";
+  const out = output as (typeof output & { files?: { name?: string; path?: string }[] }) | undefined;
+  const baseName = (v: unknown) => {
+    const raw = (String(v ?? "").split("?")[0] ?? "").split("/").filter(Boolean).pop() ?? "";
+    try { return decodeURIComponent(raw); } catch { return raw; }
+  };
+  const fileNames = download
+    ? (out?.files ?? []).map((f) => f.name ?? baseName(f.path)).filter(Boolean)
+    : [];
+  const input = command
+    ? String(run.input.command ?? "")
+    : download
+      ? fileNames.join(", ") || baseName(run.input.url) || String(run.input.url ?? "Menyiapkan unduhan…")
+      : String(run.input.path ?? output?.path ?? "") || "Menyiapkan file…";
+  const kindLabel = (() => {
+    const n = (fileNames[0] ?? input).toLowerCase();
+    if (/\.(mp4|webm|mkv|mov|avi)$/.test(n)) return "video";
+    if (/\.(jpe?g|png|gif|webp|bmp|svg)$/.test(n)) return "gambar";
+    if (/\.(mp3|m4a|wav|ogg|opus|flac)$/.test(n)) return "audio";
+    return "file";
+  })();
+  const stopped = !output && !live;
   const result = output
     ? command
       ? `${output.stdout ?? ""}${output.stderr ? `\n${output.stderr}` : ""}`.trim()
@@ -284,10 +311,10 @@ function RunItem({ run, number, sessionId }: { run: ToolRun; number: number; ses
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
         <span className="font-mono">{number}.</span>
         {command ? <Terminal className="size-3.5" /> : <FileText className="size-3.5" />}
-        <span>{command ? "Terminal" : "Tulis file"}</span>
+        <span>{command ? "Terminal" : download ? `Unduh ${kindLabel}` : `Simpan ${kindLabel}`}</span>
         <span>·</span>
-        <span className={failed ? "text-destructive" : output ? "text-success" : ""}>
-          {!output ? "Berjalan…" : failed ? "Gagal" : "Selesai"}
+        <span className={failed || stopped ? "text-destructive" : output ? "text-success" : "text-primary"}>
+          {stopped ? "Terhenti" : !output ? <>Berjalan<span className="inline-block w-4 animate-pulse">...</span></> : failed ? "Gagal" : "Selesai"}
         </span>
         <span className="ml-auto inline-flex items-center gap-1">
           <Clock3 className="size-3" />
@@ -309,12 +336,14 @@ function RunItem({ run, number, sessionId }: { run: ToolRun; number: number; ses
         <Link
           to="/chat/$sessionId/files"
           params={{ sessionId }}
-          hash={input}
+          hash={download ? (fileNames[0] ?? "") : input}
           className="mt-2 flex min-w-0 items-center gap-2 rounded-md border border-border/65 bg-background/60 px-3 py-2.5 active:bg-muted"
         >
           <FileText className="size-4 shrink-0 text-primary" />
           <span className="min-w-0 flex-1 truncate font-mono text-xs">{input}</span>
-          {failed ? (
+          {!output && live ? (
+            <span className="size-2 animate-pulse rounded-full bg-primary" />
+          ) : failed || stopped ? (
             <CircleAlert className="size-4 text-destructive" />
           ) : (
             <Check className="size-4 text-success" />
