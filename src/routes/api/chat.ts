@@ -274,6 +274,32 @@ async function searchBing(query: string, max: number) {
   }
   return out;
 }
+// Firecrawl: pencarian + pembaca situs yang tembus JavaScript/anti-bot. Aktif bila FIRECRAWL_API_KEY ada.
+async function firecrawl(path: string, payload: unknown, timeout: number) {
+  const key = process.env["FIRECRAWL_API_KEY"];
+  if (!key) return null;
+  const res = await fetch(`https://api.firecrawl.dev/v2/${path}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(timeout),
+  });
+  if (!res.ok) throw new Error(`Firecrawl ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (await res.json()) as any;
+}
+async function searchFirecrawl(query: string, max: number) {
+  const data = await firecrawl("search", { query, limit: max, country: "ID" }, 15_000);
+  if (!data) throw new Error("Firecrawl belum aktif");
+  const list = Array.isArray(data.data) ? data.data : (data.data?.web ?? []);
+  const out: WebHit[] = [];
+  for (const r of list) {
+    const h = hit(r.title ?? r.url ?? "", r.url ?? "", r.description ?? "");
+    if (h) out.push(h);
+  }
+  if (!out.length) throw new Error("Firecrawl kosong");
+  return out;
+}
 const searchCache = new Map<string, { at: number; results: WebHit[] }>();
 async function webSearch(query: string, max = 6) {
   const year = new Date().getUTCFullYear();
@@ -286,6 +312,13 @@ async function webSearch(query: string, max = 6) {
   const cached = searchCache.get(key);
   if (cached && Date.now() - cached.at < 10 * 60_000) return cached.results;
   // Bing RSS can return an empty feed from hosted servers. News is an actual fallback, not just a declared one.
+  if (process.env["FIRECRAWL_API_KEY"]) {
+    const results = await searchFirecrawl(freshQuery, max).catch(() => [] as WebHit[]);
+    if (results.length) {
+      searchCache.set(key, { at: Date.now(), results });
+      return results;
+    }
+  }
   const engines = [searchBing, searchGoogleNews].map((fn) =>
     fn(freshQuery, max).then((r) => {
       const relevant = r.filter((result) => relevantHit(result, freshQuery));
@@ -297,6 +330,14 @@ async function webSearch(query: string, max = 6) {
   return results;
 }
 async function readWebpage(url: string) {
+  try {
+    const data = await firecrawl("scrape", { url, formats: ["markdown"], onlyMainContent: true }, 30_000);
+    const doc = data?.data ?? data;
+    if (doc?.markdown)
+      return { ok: true, url: doc.metadata?.sourceURL || url, title: doc.metadata?.title ?? "", text: String(doc.markdown).slice(0, 8000) };
+  } catch {
+    /* lanjut ke pembacaan biasa */
+  }
   const res = await fetch(url, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(12_000), redirect: "follow" });
   if (!res.ok) return { ok: false, url: res.url || url, error: `Situs membatasi pembacaan otomatis (${res.status}). Gunakan cuplikan pencarian atau sumber lain.` };
   const html = await res.text();
