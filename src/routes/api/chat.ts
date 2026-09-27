@@ -443,7 +443,7 @@ export const Route = createFileRoute("/api/chat")({
             inputSchema: z.object({ query: z.string().min(1).describe("Kata kunci pencarian yang spesifik") }),
             execute: async ({ query }) => {
               searchCalls += 1;
-              if (searchCalls > 2) return { ok: false, query, results: [], detail: "Batas pencarian tercapai. Jawab sekarang dengan info yang sudah ada." };
+              if (searchCalls > 3) return { ok: false, query, results: [], detail: "Batas pencarian tercapai. Jawab sekarang dengan info yang sudah ada." };
               try {
                  const results = await webSearch(query);
                  return { ok: true, query, results };
