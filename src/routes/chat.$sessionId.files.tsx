@@ -60,6 +60,7 @@ import {
   type SavedFile,
 } from "@/lib/chat-store";
 import { loadAttachment } from "@/lib/attachment-store";
+import { FilePreview } from "@/components/file-preview";
 import { useChatStore } from "@/lib/use-chat-store";
 
 export const Route = createFileRoute("/chat/$sessionId/files")({
@@ -948,11 +949,7 @@ function FilesPage() {
               </Button>
             </div>
           </div>
-          <pre className="min-h-0 flex-1 overflow-auto px-4 py-3 font-mono text-xs leading-5 whitespace-pre-wrap break-words">
-            {active.content
-              ? `${active.content}${active.truncated ? "\n\n… cuplikan dipotong. Unduh file untuk melihat isi lengkap." : ""}`
-              : "Pratinjau teks tidak tersedia untuk file ini. Unduh untuk membukanya."}
-          </pre>
+          <FilePreview key={active.key ?? active.path} file={active} className="min-h-0 flex-1" />
         </div>
       )}
 

@@ -33,7 +33,8 @@ import {
   type ToolRun,
   type WebResult,
 } from "@/lib/chat-store";
-import { applySecretResults } from "@/lib/chat-store";
+import { applySecretResults, loadAllFiles, type SavedFile } from "@/lib/chat-store";
+import { FilePreview } from "@/components/file-preview";
 import { useChatStore } from "@/lib/use-chat-store";
 import { useViewportBox } from "@/lib/viewport";
 
@@ -163,6 +164,7 @@ function Chat() {
   const session = snapshot.sessions.find((item) => item.id === sessionId);
   const [input, setInput] = useState("");
   const [uploadError, setUploadError] = useState("");
+  const [chatPreview, setChatPreview] = useState<SavedFile | null>(null);
   const [dismissedSecrets, setDismissedSecrets] = useState<Set<string>>(new Set());
   useEffect(() => {
     try {
@@ -339,10 +341,18 @@ function Chat() {
                            ? ImageIcon
                            : file.mediaType.startsWith("video/") ? Video : FileText;
                          return (
-                           <span
+                           <button
+                             type="button"
                              key={`${file.name}-${index}`}
-                             title={file.name}
-                             className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md border border-primary-foreground/30 bg-primary-foreground/10 px-2 py-1 text-[11px] text-primary-foreground"
+                             title={`Lihat ${file.name}`}
+                             onClick={() => {
+                               const all = loadAllFiles().filter((f) => f.attachmentId);
+                               const found =
+                                 all.find((f) => f.sessionId === sessionId && f.path.split("/").pop() === file.name) ??
+                                 all.find((f) => f.path.split("/").pop() === file.name);
+                               setChatPreview(found ?? { path: file.name, content: "", runId: "", ask: "", failed: false, updatedAt: 0, mediaType: file.mediaType });
+                             }}
+                             className="cursor-pointer hover:bg-primary-foreground/20 inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md border border-primary-foreground/30 bg-primary-foreground/10 px-2 py-1 text-[11px] text-primary-foreground"
                            >
                              <Icon className="size-3.5 shrink-0" aria-hidden="true" />
                              <span className="min-w-0 max-w-40 truncate">{file.name}</span>
@@ -353,7 +363,7 @@ function Chat() {
                                    : `${(file.size / (1024 * 1024)).toFixed(1)} MB`}
                                </span>
                              )}
-                           </span>
+                           </button>
                          );
                        })}
                      </div>
@@ -425,6 +435,18 @@ function Chat() {
           </PromptInputFooter>
         </PromptInput>
       </footer>
+      <Dialog open={chatPreview !== null} onOpenChange={(o) => !o && setChatPreview(null)}>
+        <DialogContent className="flex max-h-[90dvh] max-w-3xl flex-col gap-3 p-4">
+          <DialogTitle className="truncate pr-6 text-sm">{chatPreview?.path.split("/").pop() ?? "File"}</DialogTitle>
+          {chatPreview && (
+            <FilePreview
+              key={chatPreview.attachmentId ?? chatPreview.path}
+              file={chatPreview}
+              className="max-h-[75dvh] min-h-40 rounded-md border"
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }
