@@ -452,6 +452,190 @@ async function attachmentPayload(files: SavedFile[]) {
   return result;
 }
 
+type TurnOptions = {
+  sessionId: string;
+  assistantId: string;
+  history: MessageData[];
+  attachmentNote?: string;
+  noteTargetId?: string;
+  toUpload?: SavedFile[];
+  resume?: boolean;
+};
+
+// Saat pengguna menekan "Lanjutkan", model diminta menyambung jawaban, bukan mulai lagi dari awal.
+const RESUME_NOTE =
+  "Jawaban sebelumnya dihentikan pengguna sebelum selesai. Lanjutkan jawaban itu tepat dari titik penghentian: jangan ulangi bagian yang sudah ditulis, jangan mengulang dari awal, dan langsung sambung isinya sampai tuntas.";
+
+async function runTurn({
+  sessionId,
+  assistantId,
+  history,
+  attachmentNote = "",
+  noteTargetId,
+  toUpload = [],
+  resume = false,
+}: TurnOptions) {
+  const controller = new AbortController();
+  controllers.set(sessionId, controller);
+  state = { ...state, streamingIds: [...state.streamingIds, sessionId] };
+  emit();
+  try {
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
+      body: JSON.stringify({
+        sessionId,
+        sandboxId: getSession(sessionId)?.sandboxId ?? null,
+        files: loadAllFiles()
+          .filter((file) => !file.failed && !file.attachmentId && !file.truncated)
+          .slice(0, 40)
+          .map(({ path, content }) => ({ path, content })),
+        secrets: secretPayload(),
+        attachments: await attachmentPayload(toUpload),
+        messages: [
+          ...history
+            .slice(-16)
+            .map((message) => ({
+              id: message.id,
+              role: message.role,
+              parts: [
+                {
+                  type: "text",
+                  text:
+                    message.id === noteTargetId
+                      ? messageText(message) + attachmentNote
+                      : messageText(message),
+                },
+              ],
+            }))
+            .filter((message) =>
+              message.role === "assistant" ? (message.parts[0]?.text.trim().length ?? 0) > 0 : true,
+            ),
+          ...(resume
+            ? [
+                {
+                  id: crypto.randomUUID(),
+                  role: "user",
+                  parts: [{ type: "text", text: RESUME_NOTE }],
+                },
+              ]
+            : []),
+        ],
+      }),
+    });
+    if (!response.ok || !response.body)
+      throw new Error((await response.text()) || "WenGPT Prime tidak merespons.");
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        if (controller.signal.aborted) break;
+        if (!line.trim()) continue;
+        const event = JSON.parse(line) as { t: string; [key: string]: unknown };
+        if (event.t === "text" || event.t === "error") {
+          const valueText =
+            event.t === "error" ? `\n\n**${String(event["v"])}**` : String(event["v"] ?? "");
+          patchAssistant(sessionId, assistantId, (parts) => {
+            const last = parts.at(-1);
+            return last?.type === "text"
+              ? [...parts.slice(0, -1), { type: "text", text: last.text + valueText }]
+              : [...parts, { type: "text", text: valueText }];
+          });
+        } else if (event.t === "think") {
+          const valueText = String(event["v"] ?? "");
+          patchAssistant(sessionId, assistantId, (parts) => {
+            const last = parts.at(-1);
+            return last?.type === "think"
+              ? [...parts.slice(0, -1), { type: "think", text: last.text + valueText }]
+              : [...parts, { type: "think", text: valueText }];
+          });
+        } else if (event.t === "sandbox") {
+          patchSession(sessionId, (current) => ({ ...current, sandboxId: String(event["id"]) }));
+        } else if (event.t === "sandbox_reset") {
+          patchAssistant(sessionId, assistantId, (parts) => [
+            ...parts,
+            {
+              type: "text",
+              text: "\n\n> Sandbox sesi sebelumnya sudah berakhir. Saya membuat lingkungan baru; paket sementara perlu dipasang ulang.\n\n",
+            },
+          ]);
+        } else if (event.t === "tool") {
+          const id = String(event["id"]);
+          const input = (event["input"] ?? {}) as ToolRun["input"];
+          patchAssistant(sessionId, assistantId, (parts) =>
+            parts.some((part) => part.type === "tool" && part.run.id === id)
+              ? parts.map((part) =>
+                  part.type === "tool" && part.run.id === id
+                    ? {
+                        type: "tool",
+                        run: {
+                          ...part.run,
+                          input,
+                          startedAt: Number(event["at"]) || part.run.startedAt,
+                        },
+                      }
+                    : part,
+                )
+              : [
+                  ...parts,
+                  {
+                    type: "tool",
+                    run: {
+                      id,
+                      name: String(event["name"]),
+                      input,
+                      startedAt: Number(event["at"]) || Date.now(),
+                    },
+                  },
+                ],
+          );
+        } else if (event.t === "result") {
+          const dirs = (event["output"] as { dirs?: unknown } | undefined)?.dirs;
+          if (Array.isArray(dirs)) addFolders(dirs.filter((d): d is string => typeof d === "string"));
+          if (dirs) void syncSandboxFiles(sessionId);
+          patchAssistant(sessionId, assistantId, (parts) =>
+            parts.map((part) =>
+              part.type === "tool" && part.run.id === event["id"]
+                ? {
+                    type: "tool",
+                    run: {
+                      ...part.run,
+                      output: event["output"] as ToolOut,
+                      finishedAt: Number(event["at"]) || Date.now(),
+                      ...(Number(event["durationMs"])
+                        ? { durationMs: Number(event["durationMs"]) }
+                        : {}),
+                    },
+                  }
+                : part,
+            ),
+          );
+        }
+      }
+    }
+  } catch (error) {
+    if (!controller.signal.aborted && (error as Error).name !== "AbortError")
+      patchAssistant(sessionId, assistantId, (parts) => [
+        ...parts,
+        { type: "text", text: `\n\n**${(error as Error).message}**` },
+      ]);
+  } finally {
+    if (controllers.get(sessionId) === controller) controllers.delete(sessionId);
+    if (!controller.signal.aborted) {
+      state = { ...state, streamingIds: state.streamingIds.filter((id) => id !== sessionId) };
+      save();
+      emit();
+    }
+  }
+}
+
 export async function sendMessage(
   sessionId: string,
   raw: string,
@@ -491,15 +675,10 @@ export async function sendMessage(
     updatedAt: now,
     messages: [...history, assistant],
   }));
-  const controller = new AbortController();
-  controllers.set(sessionId, controller);
-  state = { ...state, streamingIds: [...state.streamingIds, sessionId] };
-  emit();
   let newlyAttached: SavedFile[] = [];
   try {
     [, newlyAttached] = await Promise.all([loadSecrets(), persistAttachments(session, incoming)]);
   } catch (error) {
-    controllers.delete(sessionId);
     state = { ...state, streamingIds: state.streamingIds.filter((id) => id !== sessionId) };
     emit();
     throw error;
@@ -520,145 +699,34 @@ export async function sendMessage(
   const toUpload = session.sandboxId
     ? newlyAttached
     : state.attachments.filter((f) => f.attachmentId && f.sessionId === sessionId).slice(0, 10);
-  try {
-    const response = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      signal: controller.signal,
-      body: JSON.stringify({
-        sessionId,
-        sandboxId: session.sandboxId,
-        files: loadAllFiles()
-          .filter((file) => !file.failed && !file.attachmentId && !file.truncated)
-          .slice(0, 40)
-          .map(({ path, content }) => ({ path, content })),
-        secrets: secretPayload(),
-        attachments: await attachmentPayload(toUpload),
-        messages: history.slice(-16).map((message) => ({
-          id: message.id,
-          role: message.role,
-          parts: [
-            {
-              type: "text",
-              text:
-                message.id === user.id
-                  ? messageText(message) + attachmentNote
-                  : messageText(message),
-            },
-          ],
-        })),
-      }),
-    });
-    if (!response.ok || !response.body)
-      throw new Error((await response.text()) || "WenGPT Prime tidak merespons.");
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-      for (const line of lines) {
-        if (controller.signal.aborted) break;
-        if (!line.trim()) continue;
-        const event = JSON.parse(line) as { t: string; [key: string]: unknown };
-        if (event.t === "text" || event.t === "error") {
-          const valueText =
-            event.t === "error" ? `\n\n**${String(event["v"])}**` : String(event["v"] ?? "");
-          patchAssistant(sessionId, assistant.id, (parts) => {
-            const last = parts.at(-1);
-            return last?.type === "text"
-              ? [...parts.slice(0, -1), { type: "text", text: last.text + valueText }]
-              : [...parts, { type: "text", text: valueText }];
-          });
-        } else if (event.t === "think") {
-          const valueText = String(event["v"] ?? "");
-          patchAssistant(sessionId, assistant.id, (parts) => {
-            const last = parts.at(-1);
-            return last?.type === "think"
-              ? [...parts.slice(0, -1), { type: "think", text: last.text + valueText }]
-              : [...parts, { type: "think", text: valueText }];
-          });
-        } else if (event.t === "sandbox") {
-          patchSession(sessionId, (current) => ({ ...current, sandboxId: String(event["id"]) }));
-        } else if (event.t === "sandbox_reset") {
-          patchAssistant(sessionId, assistant.id, (parts) => [
-            ...parts,
-            {
-              type: "text",
-              text: "\n\n> Sandbox sesi sebelumnya sudah berakhir. Saya membuat lingkungan baru; paket sementara perlu dipasang ulang.\n\n",
-            },
-          ]);
-        } else if (event.t === "tool") {
-          const id = String(event["id"]);
-          const input = (event["input"] ?? {}) as ToolRun["input"];
-          patchAssistant(sessionId, assistant.id, (parts) =>
-            parts.some((part) => part.type === "tool" && part.run.id === id)
-              ? parts.map((part) =>
-                  part.type === "tool" && part.run.id === id
-                    ? {
-                        type: "tool",
-                        run: {
-                          ...part.run,
-                          input,
-                          startedAt: Number(event["at"]) || part.run.startedAt,
-                        },
-                      }
-                    : part,
-                )
-              : [
-                  ...parts,
-                  {
-                    type: "tool",
-                    run: {
-                      id,
-                      name: String(event["name"]),
-                      input,
-                      startedAt: Number(event["at"]) || Date.now(),
-                    },
-                  },
-                ],
-          );
-        } else if (event.t === "result") {
-          const dirs = (event["output"] as { dirs?: unknown } | undefined)?.dirs;
-          if (Array.isArray(dirs)) addFolders(dirs.filter((d): d is string => typeof d === "string"));
-          if (dirs) void syncSandboxFiles(sessionId);
-          patchAssistant(sessionId, assistant.id, (parts) =>
-            parts.map((part) =>
-              part.type === "tool" && part.run.id === event["id"]
-                ? {
-                    type: "tool",
-                    run: {
-                      ...part.run,
-                      output: event["output"] as ToolOut,
-                      finishedAt: Number(event["at"]) || Date.now(),
-                      ...(Number(event["durationMs"])
-                        ? { durationMs: Number(event["durationMs"]) }
-                        : {}),
-                    },
-                  }
-                : part,
-            ),
-          );
-        }
-      }
-    }
-  } catch (error) {
-    if (!controller.signal.aborted && (error as Error).name !== "AbortError")
-      patchAssistant(sessionId, assistant.id, (parts) => [
-        ...parts,
-        { type: "text", text: `\n\n**${(error as Error).message}**` },
-      ]);
-  } finally {
-    if (controllers.get(sessionId) === controller) controllers.delete(sessionId);
-    if (!controller.signal.aborted) {
-      state = { ...state, streamingIds: state.streamingIds.filter((id) => id !== sessionId) };
-      save();
-      emit();
-    }
-  }
+  await runTurn({
+    sessionId,
+    assistantId: assistant.id,
+    history,
+    attachmentNote,
+    noteTargetId: user.id,
+    toUpload,
+  });
+}
+
+// Menyambung jawaban yang tadi dihentikan: teks yang sudah ada tetap dipakai, lanjutan ditulis di gelembung yang sama.
+export async function resumeSession(sessionId: string) {
+  const session = getSession(sessionId);
+  if (!session || isStreaming(sessionId)) return;
+  const last = session.messages.at(-1);
+  if (!last || last.role !== "assistant" || !last.parts.some((part) => part.type === "cancelled"))
+    return;
+  const cleaned: MessageData = {
+    ...last,
+    parts: last.parts.filter((part) => part.type !== "cancelled"),
+  };
+  const history = session.messages.map((m) => (m.id === last.id ? cleaned : m));
+  patchSession(sessionId, (current) => ({
+    ...current,
+    updatedAt: Date.now(),
+    messages: current.messages.map((m) => (m.id === last.id ? cleaned : m)),
+  }));
+  await runTurn({ sessionId, assistantId: cleaned.id, history, resume: true });
 }
 
 export function loadCheckpoints(sessionId: string): Checkpoint[] {

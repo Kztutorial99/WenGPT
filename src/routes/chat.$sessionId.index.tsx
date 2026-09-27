@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Globe, ChevronRight, FileText, GitBranch, Image as ImageIcon, Paperclip, Plus, Video, X } from "lucide-react";
+import { Globe, ChevronRight, FileText, GitBranch, Image as ImageIcon, Paperclip, Plus, RotateCcw, Video, X } from "lucide-react";
 import { WenGptMark } from "@/components/wen-gpt-mark";
 import { AppNav } from "@/components/app-nav";
 import { AiDots, requestedSecrets, SecretSlider } from "@/components/secret-cards";
@@ -27,6 +27,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
   createSession,
   loadCheckpoints,
+  resumeSession,
   sendMessage,
   setActiveSession,
   stopSession,
@@ -326,12 +327,24 @@ function Chat() {
                         {part.text.replace(/\(Perintah\s*—\s*exit \?\s*\)\s*/g, "")}
                       </MessageResponse>
                     ) : part.type === "think" || part.type === "tool" ? null : part.type === "cancelled" ? (
-                      <div
-                        key={`${message.id}-${index}`}
-                        className="mt-1 inline-flex w-fit items-center gap-1.5 rounded-full border border-destructive/40 bg-destructive/10 px-2.5 py-1 text-[11px] font-medium text-destructive"
-                      >
-                        <X className="size-3" />
-                        Pesan dibatalkan
+                      <div key={`${message.id}-${index}`} className="mt-2 flex flex-wrap items-center gap-2">
+                        <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-destructive/40 bg-destructive/10 px-2.5 py-1 text-[11px] font-medium text-destructive">
+                          <X className="size-3" />
+                          Jawaban dihentikan
+                        </span>
+                        {message.id === last?.id && !streaming && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            title="Sambung jawaban yang tadi berhenti"
+                            onClick={() => void resumeSession(sessionId)}
+                            className="h-7 gap-1.5 rounded-full border-border/70 bg-card/60 px-3 text-xs font-medium"
+                          >
+                            <RotateCcw className="size-3" />
+                            Lanjutkan jawaban
+                          </Button>
+                        )}
                       </div>
                     ) : null,
                   )}
