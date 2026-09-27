@@ -282,6 +282,8 @@ function Chat() {
                 ? "Mencari di web"
                 : currentRun?.name === "read_webpage"
                   ? "Membaca halaman web"
+                  : currentRun?.name === "download_file"
+                    ? "Mengunduh file"
                   : currentRun?.name === "run_command"
                 ? "Menjalankan perintah"
                 : currentRun?.name === "write_file"

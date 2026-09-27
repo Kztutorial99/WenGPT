@@ -16,7 +16,7 @@ Kamu juga punya sandbox Linux (Ubuntu, Python 3, Node.js, pip, npm tersedia, aks
 - Jika suatu situs menolak akses baca otomatis, jangan ulangi URL yang sama; gunakan cuplikan hasil pencarian atau sumber resmi lain. Jangan mengarang isi halaman yang ditolak.
 - Kamu bisa melihat gambar/screenshot yang dilampirkan pengguna; video dikirim sebagai beberapa frame berurutan. Analisis isi visualnya langsung (teks, error, UI, objek, kejadian) tanpa membuka file lewat sandbox.
 Cukup 1-2 kali web_search dengan query berbeda; jika tetap kosong jangan ulang terus, langsung jawab dengan info yang ada. Setelah memakai web_search, jawab ringkas dan rapi, lalu cantumkan sumber sebagai link markdown [judul](url).
-- download_video: WAJIB dipakai setiap kali pengguna minta download/unduh/simpan video (atau audio dari video). Langkah: (1) jika pengguna belum memberi URL, cari dulu dengan web_search dan ambil URL halaman video yang spesifik (misal youtube.com/watch?v=..., tiktok.com/@user/video/...), (2) langsung panggil download_video dengan URL itu. JANGAN pernah menulis script, file .txt/.html, atau curl halaman untuk "mencari cara download". JANGAN mencoba-coba banyak cara manual. Jika gagal, boleh coba maksimal 1 URL lain, lalu jelaskan alasannya. Jika berhasil, sebutkan nama file, ukuran, dan beri link unduh sebagai markdown [Unduh video](link) memakai field link dari hasil tool, serta bilang file ada di File Manager folder downloads.
+- download_file: WAJIB dipakai setiap kali pengguna minta download/unduh/simpan file APA PUN: video, audio, gambar/foto, PDF, dokumen, zip, apk, dll. Langkah: (1) jika belum ada URL, cari dengan web_search lalu ambil URL spesifik (halaman video/postingan, atau URL file/gambar langsung), (2) langsung panggil download_file dengan URL itu dan kind yang sesuai (video/audio/image/file/auto). Untuk gambar dari halaman web, pakai URL gambar langsung (misal og:image dari read_webpage) atau URL halaman postingan (Instagram/X/Pinterest). JANGAN menulis script, file .txt/.html, atau curl halaman untuk "mencari cara download". Jika gagal, boleh coba maksimal 1 URL lain, lalu jelaskan alasannya. Jika berhasil, sebutkan nama file, ukuran, dan beri link unduh sebagai markdown [Unduh file](link) dari field link, serta bilang file ada di File Manager folder downloads.
 - write_file: tulis file ke sandbox. File yang ditulis dengan write_file otomatis muncul di menu File Manager pengguna.
 
 Aturan:
@@ -501,53 +501,62 @@ export const Route = createFileRoute("/api/chat")({
               }
             },
           }),
-          download_video: tool({
+          download_file: tool({
             description:
-              "Download video dari URL halaman (YouTube, TikTok, Instagram, X/Twitter, Facebook, Vimeo, Reddit, dll ribuan situs) atau URL file video langsung. Memakai yt-dlp + ffmpeg, memverifikasi hasilnya benar-benar video, lalu menyimpannya di /home/user/downloads (muncul di File Manager).",
+              "Download file apa pun dari URL: video/audio dari halaman (YouTube, TikTok, Instagram, X, Facebook, Vimeo, Reddit, ribuan situs via yt-dlp), gambar (termasuk gambar postingan via gallery-dl), atau file langsung (PDF, zip, apk, docx, jpg, mp4, dll). Memverifikasi tipe file asli (bukan HTML halaman error) lalu menyimpan di /home/user/downloads (muncul di File Manager).",
             inputSchema: z.object({
-              url: z.string().url().describe("URL halaman video atau file video"),
-              quality: z.enum(["best", "1080", "720", "480", "audio"]).optional().describe("Default 720"),
+              url: z.string().url().describe("URL halaman atau file"),
+              kind: z.enum(["auto", "video", "audio", "image", "file"]).optional().describe("Default auto"),
+              quality: z.enum(["best", "1080", "720", "480"]).optional().describe("Khusus video, default 720"),
             }),
-            execute: async ({ url, quality }) => {
+            execute: async ({ url, kind = "auto", quality }) => {
               try {
                 const sb = await getSandbox();
                 const q = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
-                const h = quality === "best" ? "" : `[height<=${quality && quality !== "audio" ? quality : "720"}]`;
-                const fmt = quality === "audio" ? "ba/b" : `bv*${h}+ba/b${h}/bv*+ba/b`;
+                const h = quality === "best" ? "" : `[height<=${quality ?? "720"}]`;
+                const fmt = kind === "audio" ? "ba/b" : `bv*${h}+ba/b${h}/bv*+ba/b`;
+                const media = kind === "auto" || kind === "video" || kind === "audio";
+                const ytdlp = `$Y --no-playlist --no-warnings --restrict-filenames --no-part --retries 3 --socket-timeout 30 -f ${q(fmt)} ${kind === "audio" ? "-x --audio-format mp3" : "--merge-output-format mp4 --remux-video mp4"} -o '%(title).70s-%(id)s.%(ext)s' ${q(url)} 2>&1 | tail -n 15`;
                 const script = [
-                  "set -o pipefail; D=/home/user/downloads; mkdir -p $D; cd $D",
+                  "D=/home/user/downloads; mkdir -p $D; cd $D",
                   "command -v ffmpeg >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg) >/dev/null 2>&1",
+                  "command -v file >/dev/null || (sudo apt-get install -y -qq file) >/dev/null 2>&1",
                   "Y=/home/user/.local/bin/yt-dlp; mkdir -p /home/user/.local/bin",
-                  "if [ ! -x $Y ] || [ -n \"$(find $Y -mtime +2 2>/dev/null)\" ]; then curl -sSL -o $Y https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux && chmod +x $Y; fi",
+                  "has(){ find $D -maxdepth 1 -type f -newer $B | grep -q .; }",
                   "B=$(mktemp); touch $B; sleep 1",
-                  `$Y --no-playlist --no-warnings --restrict-filenames --no-part --retries 3 --socket-timeout 30 -f ${q(fmt)} ${quality === "audio" ? "-x --audio-format mp3" : "--merge-output-format mp4 --remux-video mp4"} -o '%(title).70s-%(id)s.%(ext)s' ${q(url)} 2>&1 | tail -n 15`,
-                  "RC=$?",
-                  // fallback: URL file langsung
-                  `if ! find $D -maxdepth 1 -type f -newer $B | grep -q .; then N=$D/video_$(date +%s).mp4; curl -sSL -A 'Mozilla/5.0' --max-time 110 -o $N ${q(url)}; fi`,
+                  // 1) file langsung: cek content-type dulu
+                  `CT=$(curl -sSIL -A 'Mozilla/5.0' --max-time 20 ${q(url)} | grep -i '^content-type' | tail -1 | tr -d '\\r' | cut -d' ' -f2 | cut -d';' -f1)`,
+                  "echo \"content-type: $CT\"",
+                  `if [ -n "$CT" ] && ! echo "$CT" | grep -Eqi 'text/html|xhtml'; then NAME=$(basename "$(echo ${q(url)} | cut -d'?' -f1)"); [ -z "$NAME" ] || [ "$NAME" = "/" ] && NAME=file_$(date +%s); curl -sSL -A 'Mozilla/5.0' --max-time 200 -o "$D/$NAME" ${q(url)}; fi`,
+                  // 2) media via yt-dlp
+                  media ? `if ! has; then if [ ! -x $Y ] || [ -n "$(find $Y -mtime +2 2>/dev/null)" ]; then curl -sSL -o $Y https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux && chmod +x $Y; fi; ${ytdlp}; fi` : "",
+                  // 3) gambar/postingan via gallery-dl
+                  kind !== "file" ? `if ! has; then (command -v gallery-dl >/dev/null || pip install -q --user gallery-dl >/dev/null 2>&1); PATH=$PATH:/home/user/.local/bin gallery-dl -D $D --range 1-10 ${q(url)} 2>&1 | tail -n 8; fi` : "",
+                  // 4) gambar og:image dari halaman HTML
+                  kind === "image" || kind === "auto" ? `if ! has; then IMG=$(curl -sSL -A 'Mozilla/5.0' --max-time 20 ${q(url)} | grep -oiE '<meta[^>]+(og:image|twitter:image)[^>]+>' | grep -oiE 'content="[^"]+"' | head -1 | cut -d'"' -f2); [ -n "$IMG" ] && echo "og:image $IMG" && curl -sSL -A 'Mozilla/5.0' --max-time 60 -o "$D/image_$(date +%s).$(echo "$IMG" | cut -d'?' -f1 | grep -oE '(jpe?g|png|webp|gif)$' || echo jpg)" "$IMG"; fi` : "",
                   "echo '---FILES---'",
-                  "for f in $(find $D -maxdepth 1 -type f -newer $B); do if ffprobe -v error -show_entries stream=codec_type -of csv=p=0 \"$f\" 2>/dev/null | grep -Eq 'video|audio'; then echo \"OK|$f|$(stat -c %s \"$f\")|$(ffprobe -v error -show_entries format=duration -of csv=p=0 \"$f\" | cut -d. -f1)\"; else rm -f \"$f\"; echo \"BAD|$f\"; fi; done",
+                  "find $D -maxdepth 1 -type f -newer $B | while read -r f; do M=$(file -b --mime-type \"$f\"); if echo \"$M\" | grep -Eqi 'text/html|xhtml' || [ ! -s \"$f\" ]; then rm -f \"$f\"; echo \"BAD|$f|$M\"; else echo \"OK|$f|$(stat -c %s \"$f\")|$M\"; fi; done",
                   "rm -f $B; exit 0",
-                ].join("\n");
+                ].filter(Boolean).join("\n");
                 const r = await sb.commands.run(script, { timeoutMs: 280_000, cwd: "/home/user", envs: secretEnvs });
                 const [log = "", list = ""] = r.stdout.split("---FILES---");
-                const files = await Promise.all(
-                  list.split("\n").filter((l) => l.startsWith("OK|")).map(async (l) => {
-                    const [, path = "", size, dur] = l.split("|");
-                    return {
-                      path,
-                      sizeMB: +(Number(size) / 1048576).toFixed(2),
-                      durationSec: Number(dur) || undefined,
-                      link: `/api/sandbox-download?sandboxId=${encodeURIComponent(sb.sandboxId)}&path=${encodeURIComponent(path)}`,
-                    };
-                  }),
-                );
+                const files = list.split("\n").filter((l) => l.startsWith("OK|")).map((l) => {
+                  const [, path = "", size, mime] = l.split("|");
+                  return {
+                    path,
+                    name: path.split("/").pop(),
+                    mime,
+                    sizeMB: +(Number(size) / 1048576).toFixed(2),
+                    link: `/api/sandbox-download?sandboxId=${encodeURIComponent(sb.sandboxId)}&path=${encodeURIComponent(path)}`,
+                  };
+                });
                 if (!files.length)
                   return {
                     ok: false,
                     url,
-                    error: "Video tidak bisa diunduh dari URL ini (file non-video sudah dihapus otomatis).",
+                    error: "File tidak bisa diunduh dari URL ini (hasil berupa halaman HTML/kosong sudah dihapus otomatis).",
                     log: clip(redact(log), 2500),
-                    saran: "Jangan tulis script/HTML/txt manual. Coba URL halaman video yang spesifik (bukan halaman pencarian/beranda), atau jelaskan ke pengguna bahwa situs ini membatasi unduhan (login/DRM).",
+                    saran: "Jangan tulis script/HTML/txt manual. Coba URL yang lebih spesifik (URL file/gambar langsung atau halaman postingan/video), atau jelaskan bahwa situs butuh login/DRM.",
                     dirs: await listDirs(sb),
                   };
                 return { ok: true, url, files, dirs: await listDirs(sb) };

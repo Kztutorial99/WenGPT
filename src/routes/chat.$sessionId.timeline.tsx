@@ -193,18 +193,27 @@ function CheckpointPicker({
   );
 }
 function ThinkingItem({ entry, number, active }: { entry: Extract<TimelineEntry, { type: "think" }>; number: number; active: boolean }) {
+  const [expanded, setExpanded] = useState(false);
   return (
     <li id={entry.id} className="mb-7 min-w-0 scroll-mt-24">
       <span className={`absolute -left-[6px] mt-1 size-3 rounded-full border-2 border-background ${active ? "animate-pulse bg-primary" : "bg-success"}`} />
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        className="flex w-full items-center gap-2 text-left text-xs text-muted-foreground hover:text-foreground"
+      >
         <span className="font-mono">{number}.</span>
+        <ChevronRight className={`size-3.5 transition-transform ${expanded ? "rotate-90" : ""}`} />
         <Brain className="size-3.5" />
-        <span>Proses berpikir</span>
+        <span>{active ? "Sedang berpikir…" : "Proses berpikir"}</span>
         <span className="ml-auto">{formatTime(entry.at)}</span>
-      </div>
-      <div className="mt-2 min-w-0 rounded-md border border-border/65 bg-background/60 px-3 py-2.5 text-xs leading-5 whitespace-pre-wrap break-words text-muted-foreground">
-        {entry.text.trim() || "Sedang berpikir…"}
-      </div>
+      </button>
+      {expanded && (
+        <div className="mt-2 min-w-0 rounded-md border border-border/65 bg-background/60 px-3 py-2.5 text-xs leading-5 whitespace-pre-wrap break-words text-muted-foreground">
+          {entry.text.trim() || "Sedang berpikir…"}
+        </div>
+      )}
     </li>
   );
 }
