@@ -22,6 +22,7 @@ import {
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
   createSession,
   loadCheckpoints,
@@ -59,24 +60,57 @@ const STARTERS = [
 ];
 function AttachmentHeader() {
   const attachments = usePromptInputAttachments();
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const preview = attachments.files.find((f) => f.id === previewId);
   return (
     <PromptInputHeader className={attachments.files.length ? "px-3 pt-2" : "hidden"}>
-      {attachments.files.map((file) => (
-        <span
-          key={file.id}
-          className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border/70 bg-muted/70 px-2 py-1 text-[11px]"
-        >
-          <FileText className="size-3.5 shrink-0 text-primary" />
-          <span className="max-w-48 truncate">{file.filename ?? "file"}</span>
-          <PromptInputButton
-            className="size-5"
-            aria-label={`Hapus ${file.filename ?? "file"}`}
-            onClick={() => attachments.remove(file.id)}
+      {attachments.files.map((file) => {
+        const isImage = file.mediaType?.startsWith("image/");
+        const isVideo = file.mediaType?.startsWith("video/");
+        const Icon = isImage ? ImageIcon : isVideo ? Video : FileText;
+        return (
+          <span
+            key={file.id}
+            className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border/70 bg-muted/70 py-1 pr-1 pl-1 text-[11px]"
           >
-            <X className="size-3" />
-          </PromptInputButton>
-        </span>
-      ))}
+            <button
+              type="button"
+              onClick={() => setPreviewId(file.id)}
+              className="inline-flex min-w-0 items-center gap-1.5"
+              aria-label={`Pratinjau ${file.filename ?? "file"}`}
+            >
+              {isImage && file.url ? (
+                <img src={file.url} alt="" className="size-6 shrink-0 rounded object-cover" />
+              ) : (
+                <Icon className="size-3.5 shrink-0 text-primary" />
+              )}
+              <span className="max-w-40 truncate">{file.filename ?? "file"}</span>
+            </button>
+            <PromptInputButton
+              className="size-5"
+              aria-label={`Hapus ${file.filename ?? "file"}`}
+              onClick={() => attachments.remove(file.id)}
+            >
+              <X className="size-3" />
+            </PromptInputButton>
+          </span>
+        );
+      })}
+      <Dialog open={!!preview} onOpenChange={(open) => !open && setPreviewId(null)}>
+        <DialogContent className="w-[min(92vw,26rem)] max-w-[92vw] gap-3 p-4">
+          <DialogTitle className="truncate pr-6 text-sm">{preview?.filename ?? "File"}</DialogTitle>
+          {preview?.mediaType?.startsWith("image/") && preview.url ? (
+            <img src={preview.url} alt={preview.filename ?? ""} className="max-h-[50dvh] w-full rounded-md object-contain bg-muted/40" />
+          ) : preview?.mediaType?.startsWith("video/") && preview.url ? (
+            <video src={preview.url} controls className="max-h-[50dvh] w-full rounded-md bg-muted/40" />
+          ) : (
+            <div className="flex items-center gap-2 rounded-md border border-border/70 bg-muted/40 p-3 text-xs">
+              <FileText className="size-5 shrink-0 text-primary" />
+              <span className="min-w-0 truncate">{preview?.mediaType || "file"}</span>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </PromptInputHeader>
   );
 }
@@ -163,6 +197,8 @@ function Chat() {
   }, [snapshot.ready, session, sessionId]);
   const submit = (text: string, files: PromptInputMessage["files"] = []) => {
     const value = text.trim();
+    // Saat AI masih menjawab, lempar agar teks & lampiran tidak dibersihkan.
+    if (streaming) throw new Error("busy");
     if (!value && !files.length) return;
     setInput("");
     setUploadError("");
