@@ -55,6 +55,7 @@ def restart(acc_id, user, key):
     env = dict(os.environ, KAGGLE_USERNAME=user, KAGGLE_KEY=key)
     r = subprocess.run(["kaggle", "kernels", "push", "-p", d], env=env, text=True, capture_output=True)
     print("  push:", (r.stdout + r.stderr).strip()[-400:])
+    redis("SET", f"foundry:restart-at:{acc_id}", str(int(time.time())), "EX", 7200)
     redis("DEL", f"foundry:watchdog:fail:{acc_id}")
     return r.returncode == 0
 
@@ -70,18 +71,21 @@ def check(acc_id, user, key):
         print("  -> sesi mati, nyalakan ulang"); restart(acc_id, user, key); return
     if status == "queued":
         return
-    # Sesi hidup: pastikan AI benar-benar menjawab
-    try:
-        meta = kaggle_get(user, key, "kernels/pull", userName=user, kernelSlug=SLUG).get("metadata", {})
-        started = datetime.fromisoformat(meta["lastRunTime"].replace("Z", "+00:00")[:26] + "+00:00")
-        age_min = (datetime.now(timezone.utc) - started).total_seconds() / 60
-    except Exception:
-        age_min = 999
+    # Sesi hidup: pastikan AI benar-benar menjawab.
+    # lastRunTime dari Kaggle sering masih menunjuk run lama, jadi masa pemanasan
+    # dihitung dari waktu restart terakhir yang kita catat sendiri di Redis.
+    now = int(time.time())
     url = redis("GET", f"foundry:ai-url:{acc_id}")
     healthy = bool(url) and ai_answers(url)
-    print(f"  umur sesi ~{age_min:.0f} menit | url={'ada' if url else 'tidak ada'} | AI menjawab={healthy}")
+    print(f"  url={'ada' if url else 'tidak ada'} | AI menjawab={healthy}")
     if healthy:
         redis("DEL", f"foundry:watchdog:fail:{acc_id}"); return
+    restart_at = int(redis("GET", f"foundry:restart-at:{acc_id}") or 0)
+    if not restart_at:
+        redis("SET", f"foundry:restart-at:{acc_id}", str(now), "EX", 7200)
+        print("  sesi lama tanpa catatan restart: pemanasan dihitung dari sekarang"); return
+    age_min = (now - restart_at) / 60
+    print(f"  sejak restart ~{age_min:.0f} menit")
     if age_min < WARMUP_MIN:
         print("  masih pemanasan, tunggu"); return
     fails = int(redis("INCR", f"foundry:watchdog:fail:{acc_id}") or FAILS_TO_RESTART)
