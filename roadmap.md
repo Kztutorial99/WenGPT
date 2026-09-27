@@ -1,5 +1,6 @@
 # Roadmap
 
+- [x] Rapikan format jawaban "Info lengkap" menjadi profil berbagian dan daftar mudah dibaca
 - [x] Terapkan tema kisi hitam-merah dari referensi dan garis kotak halus untuk Prime; cek tampilan ponsel/desktop dan push ke GitHub
 - [x] Satukan proses berpikir dan eksekusi dalam Linimasa; chat hanya menampilkan pintasan ringkas dan hasil setelah selesai
 - [x] Sesi chat terpisah dan riwayat browser
