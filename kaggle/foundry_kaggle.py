@@ -131,7 +131,23 @@ elif not ollama_has(ACTIVE_MODEL):
         raise RuntimeError("Gagal membuat model rvn27b")
 print("Model:", ACTIVE_MODEL)
 print("Memanaskan model ke GPU...")
-requests.post(f"{OLLAMA_URL}/api/generate", json={"model": ACTIVE_MODEL, "prompt": "Hi", "stream": False, "keep_alive": -1}, timeout=900).raise_for_status()
+# Pemanasan DIBATASI 1 token + thinking mati: tanpa ini model 27B bisa generasi lama
+# dan sesi terlihat "Running" padahal server belum siap menjawab.
+def warm_model():
+    try:
+        r = requests.post(f"{OLLAMA_URL}/api/generate", timeout=900,
+                          json={"model": ACTIVE_MODEL, "prompt": "ok", "stream": False,
+                                "keep_alive": -1, "think": False,
+                                "options": {"num_predict": 1}})
+        return r.status_code == 200
+    except Exception as e:
+        print("Pemanasan gagal:", str(e)[:200], flush=True); return False
+for _attempt in range(3):
+    if warm_model(): break
+    print(f"Pemanasan ulang ({_attempt+1}/3)...", flush=True); time.sleep(15)
+else:
+    raise RuntimeError("Model gagal dipanaskan setelah 3 percobaan")
+print("Model panas & siap menjawab.", flush=True)
 
 # %% [code]
 # CELL 5 - TUNNEL + LAPOR URL (satu penjaga: hidupkan ulang tunnel/ollama & lapor tiap 60 detik)
