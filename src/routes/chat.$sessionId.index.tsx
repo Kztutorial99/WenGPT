@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Bot, Globe, ChevronRight, FileText, GitBranch, Image as ImageIcon, Paperclip, Plus, Video, X } from "lucide-react";
+import { Globe, ChevronRight, FileText, GitBranch, Image as ImageIcon, Paperclip, Plus, Video, X } from "lucide-react";
+import { WenGptMark } from "@/components/wen-gpt-mark";
 import { AppNav } from "@/components/app-nav";
 import { AiDots, requestedSecrets, SecretSlider } from "@/components/secret-cards";
 import {
@@ -214,7 +215,7 @@ function Chat() {
       <header className="z-20 mx-2 mt-2 flex shrink-0 flex-col overflow-hidden rounded-2xl border border-brand-line bg-card/95 backdrop-blur-xl sm:mx-5 sm:mt-4 sm:flex-row sm:items-center sm:justify-between sm:px-4 sm:py-2">
         <div className="flex min-w-0 items-center justify-center gap-2.5 px-3 py-2.5 sm:justify-start sm:px-0 sm:py-0">
           <span className="brand-mark size-8">
-            <Bot className="size-4" />
+            <WenGptMark className="size-4" />
           </span>
           <h1 className="flex min-w-0 items-center gap-2 text-sm font-semibold sm:text-base">
             <span>WenGPT</span>
@@ -242,7 +243,7 @@ function Chat() {
           {!session?.messages.length ? (
             <section className="flex min-h-[62dvh] flex-col items-center justify-center text-center">
               <span className="brand-mark mb-5 size-12">
-                <Bot className="size-5" />
+                <WenGptMark className="size-5" />
               </span>
               <h2 className="text-balance text-2xl font-semibold sm:text-3xl">WenGPT <span className="text-primary">Prime</span></h2>
               <p className="mt-2 max-w-md text-pretty text-sm leading-6 text-muted-foreground">
@@ -289,7 +290,7 @@ function Chat() {
                 {message.role === "assistant" && (
                   <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
                     <span className="brand-mark size-6 rounded-sm">
-                      <Bot className="size-3.5" />
+                      <WenGptMark className="size-4" />
                     </span>
                     WenGPT Prime
                   </div>
