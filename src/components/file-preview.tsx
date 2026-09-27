@@ -3,10 +3,11 @@ import { loadAttachment } from "@/lib/attachment-store";
 import { getSession, type SavedFile } from "@/lib/chat-store";
 
 /** Link unduhan langsung untuk file hasil sandbox (video hasil download, dll). */
-export function sandboxLink(file: SavedFile) {
-  if (!file.key?.startsWith("sb:") || !file.sessionId) return null;
-  const id = getSession(file.sessionId)?.sandboxId;
-  return id ? `/api/sandbox-download?sandboxId=${encodeURIComponent(id)}&path=${encodeURIComponent(file.path)}` : null;
+export function sandboxLink(file: SavedFile, download = false) {
+  if (!file.path.startsWith("/home/user/") || file.attachmentId) return null;
+  const current = typeof window !== "undefined" ? window.location.pathname.split("/")[2] : undefined;
+  const id = (file.sessionId && getSession(file.sessionId)?.sandboxId) || (current && getSession(current)?.sandboxId);
+  return id ? `/api/sandbox-download?sandboxId=${encodeURIComponent(id)}&path=${encodeURIComponent(file.path)}${download ? "&dl=1" : ""}` : null;
 }
 
 const EXT_TYPES: Record<string, string> = {
@@ -18,7 +19,7 @@ const EXT_TYPES: Record<string, string> = {
 
 export function kindOf(file: Pick<SavedFile, "path" | "mediaType">) {
   const ext = file.path.split(".").pop()?.toLowerCase() ?? "";
-  const type = (file.mediaType !== "application/octet-stream" && file.mediaType) || EXT_TYPES[ext] || "";
+  const type = EXT_TYPES[ext] || file.mediaType || "";
   if (type.startsWith("image/")) return "image";
   if (type.startsWith("video/")) return "video";
   if (type.startsWith("audio/")) return "audio";
@@ -73,7 +74,7 @@ export function FilePreview({ file, className = "" }: { file: SavedFile; classNa
     return (
       <div className={`flex items-center justify-center overflow-auto bg-muted/40 p-3 ${className}`}>
         {kind === "image" && (
-          <img src={url} alt={file.path.split("/").pop() ?? ""} className="max-h-full max-w-full rounded-md object-contain" />
+          <img src={url} onError={() => setFailed(true)} alt={file.path.split("/").pop() ?? ""} className="max-h-full max-w-full rounded-md object-contain" />
         )}
         {kind === "video" && (
           <video src={url} onError={() => setFailed(true)} controls playsInline className="max-h-full max-w-full rounded-md" />
