@@ -90,30 +90,28 @@ if not ollama_ok() and not start_ollama():
 print("OK Ollama jalan")
 
 # %% [code]
-# CELL 4 - MODEL (pakai file GGUF dari dataset cache; TIDAK pernah ollama pull)
-MMPROJ_FILE = "mmproj-Qwen3.8-27B-Q8_0.gguf"   # file penglihatan (gambar/screenshot)
-
-def ollama_has(n):
-    return subprocess.run(["ollama", "show", n], capture_output=True, env=os.environ.copy()).returncode == 0
-
-def find_or_download(filename):
-    # 1) dari dataset cache 2) dari sisa sesi sebelumnya 3) download SEKALI dari Hugging Face
-    for base in [CACHE, "/kaggle/working"]:
-        if base:
-            hit = glob.glob(f"{base}/gguf/{filename}") + glob.glob(f"{base}/**/{filename}", recursive=True)
-            if hit: return hit[0]
-    print(f"Download {filename} (sekali saja - nanti pindahkan ke dataset {DATASET}/gguf/ biar tidak download lagi)...")
-    from huggingface_hub import hf_hub_download
-    path = hf_hub_download(repo_id=HF_REPO, filename=filename)
-    os.makedirs("/kaggle/working/gguf", exist_ok=True)
-    dest = f"/kaggle/working/gguf/{filename}"
-    if not os.path.exists(dest): shutil.copy(path, dest)
-    return dest
-
+# CELL 4 - MODEL (pakai cache dataset; TIDAK pernah ollama pull / download ulang)
 ACTIVE_MODEL = "rvn27b"
-if not ollama_has(ACTIVE_MODEL):
+if ollama_has(MODEL):
+    # Cache dataset sudah memuat model + projector penglihatan dari pull sebelumnya.
+    ACTIVE_MODEL = MODEL
+elif not ollama_has(ACTIVE_MODEL):
+    def find_or_download(filename):
+        # 1) dari dataset cache 2) dari sisa sesi sebelumnya 3) download SEKALI dari Hugging Face
+        for base in [CACHE, "/kaggle/working"]:
+            if base:
+                hit = glob.glob(f"{base}/gguf/{filename}") + glob.glob(f"{base}/**/{filename}", recursive=True)
+                if hit: return hit[0]
+        print(f"Download {filename} (sekali saja - nanti pindahkan ke dataset {DATASET}/gguf/ biar tidak download lagi)...")
+        from huggingface_hub import hf_hub_download
+        path = hf_hub_download(repo_id=HF_REPO, filename=filename)
+        os.makedirs("/kaggle/working/gguf", exist_ok=True)
+        dest = f"/kaggle/working/gguf/{filename}"
+        if not os.path.exists(dest): shutil.copy(path, dest)
+        return dest
+
     gguf = find_or_download(HF_FILE)
-    mmproj = find_or_download(MMPROJ_FILE)
+    mmproj = find_or_download("mmproj-Qwen3.8-27B-Q8_0.gguf")   # file penglihatan (gambar/screenshot)
     open("/kaggle/working/Modelfile", "w").write(
         f"FROM {gguf}\nMMPROJ {mmproj}\nPARAMETER num_ctx 8192\n")
     if subprocess.run(["ollama", "create", ACTIVE_MODEL, "-f", "/kaggle/working/Modelfile"], env=os.environ.copy()).returncode != 0:
