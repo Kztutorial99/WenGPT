@@ -1,0 +1,28 @@
+name: Kaggle AI Watchdog
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+concurrency:
+  group: kaggle-watchdog
+  cancel-in-progress: false
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -q kaggle requests
+      - run: python kaggle/watchdog.py
+        env:
+          UPSTASH_URL: ${{ secrets.UPSTASH_URL }}
+          UPSTASH_TOKEN: ${{ secrets.UPSTASH_TOKEN }}
+          KAGGLE_USERNAME_1: ${{ secrets.KAGGLE_USERNAME_1 }}
+          KAGGLE_KEY_1: ${{ secrets.KAGGLE_KEY_1 }}
+          KAGGLE_USERNAME_2: ${{ secrets.KAGGLE_USERNAME_2 }}
+          KAGGLE_KEY_2: ${{ secrets.KAGGLE_KEY_2 }}
+          KAGGLE_USERNAME_3: ${{ secrets.KAGGLE_USERNAME_3 }}
+          KAGGLE_KEY_3: ${{ secrets.KAGGLE_KEY_3 }}

@@ -77,6 +77,15 @@ def ollama_ok():
     try: return requests.get(f"{OLLAMA_URL}/api/tags", timeout=5).status_code == 200
     except Exception: return False
 
+def ollama_has(name):
+    # True kalau model sudah terdaftar di Ollama (nama tanpa tag dianggap ":latest")
+    try:
+        names = [m.get("name", "") for m in requests.get(f"{OLLAMA_URL}/api/tags", timeout=10).json().get("models", [])]
+    except Exception:
+        return False
+    want = name if ":" in name.split("/")[-1] else f"{name}:latest"
+    return any(n == name or n == want for n in names)
+
 def start_ollama():
     log = open(LOG_FILE, "a")
     subprocess.Popen(["ollama", "serve"], env=os.environ.copy(), stdout=log, stderr=log)
@@ -84,6 +93,10 @@ def start_ollama():
         if ollama_ok(): return True
         time.sleep(1)
     return False
+
+def kill_ollama():
+    subprocess.run("pkill -9 -f 'ollama serve'; pkill -9 -f 'ollama runner'; pkill -9 -f 'ollama_llama_server'", shell=True)
+    time.sleep(3)
 
 if not ollama_ok() and not start_ollama():
     print(open(LOG_FILE).read()[-4000:]); raise RuntimeError("Ollama gagal jalan")
@@ -148,12 +161,48 @@ def tunnel_ok(url):
     try: return requests.get(f"{url}/api/tags", timeout=15).status_code == 200
     except Exception: return False
 
+def ai_ok(timeout=300):
+    # Tes NYATA: minta model menjawab 1 token. /api/tags bisa tetap OK walau model macet/GPU hang.
+    try:
+        r = requests.post(f"{OLLAMA_URL}/api/generate", timeout=timeout,
+                          json={"model": ACTIVE_MODEL, "prompt": "ok", "stream": False, "keep_alive": -1,
+                                "options": {"num_predict": 1}})
+        return r.status_code == 200 and "response" in r.json()
+    except Exception as e:
+        print("[guard] tes AI gagal:", str(e)[:200], flush=True); return False
+
+def heal_ai():
+    # Model tidak menjawab -> matikan Ollama total, hidupkan ulang, panaskan model lagi
+    upstash(f"del/{quote(REG_KEY, safe='')}")
+    print("[guard] AI tidak menjawab -> restart Ollama + muat ulang model", flush=True)
+    kill_ollama()
+    if not start_ollama(): return False
+    return ai_ok(timeout=900)
+
 def guard():
-    p, n, fails = None, 0, 0
+    p, n, fails, ai_fails, heals = None, 0, 0, 0, 0
     while True:
         if not ollama_ok():
             upstash(f"del/{quote(REG_KEY, safe='')}")   # jangan arahkan orang ke server mati
-            print("[guard] Ollama mati -> hidupkan ulang", flush=True); start_ollama()
+            print("[guard] Ollama mati -> hidupkan ulang", flush=True); kill_ollama(); start_ollama()
+        # Tes jawaban model tiap 3 menit (tidak dilakukan tiap menit supaya tidak mengganggu user)
+        if n % 3 == 0:
+            if ai_ok():
+                ai_fails, heals = 0, 0
+            else:
+                ai_fails += 1
+                print(f"[guard] AI tidak menjawab ({ai_fails}/2)", flush=True)
+                if ai_fails >= 2:
+                    ai_fails = 0
+                    if heal_ai():
+                        heals = 0; print("[guard] AI pulih", flush=True)
+                    else:
+                        heals += 1
+                        if heals >= 3:
+                            # Tidak bisa dipulihkan dari dalam -> akhiri sesi, watchdog GitHub akan menyalakan ulang
+                            upstash(f"del/{quote(REG_KEY, safe='')}")
+                            print("[guard] AI gagal pulih 3x -> hentikan sesi agar di-restart otomatis", flush=True)
+                            os._exit(1)
         if p is None or p.poll() is not None:
             p = start_tunnel(); STATE["url"] = None; fails = 0
             print("[guard] tunnel dinyalakan", flush=True)
@@ -162,7 +211,7 @@ def guard():
         if url and url != STATE["url"]:
             STATE["url"] = url
             print(f"{'='*60}\nAKUN {ACCOUNT_ID} URL: {url}\n{'='*60}", flush=True)
-        if url and ollama_ok():
+        if url and ollama_ok() and ai_fails == 0:
             if tunnel_ok(url):
                 fails = 0
                 upstash(f"set/{quote(REG_KEY, safe='')}/{quote(url, safe='')}?EX=180")
@@ -191,6 +240,12 @@ for _ in range(60):
 print("URL AKTIF:", STATE["url"])
 
 # %% [code]
-# CELL 6 - JAGA SESI HIDUP (sampai batas 12 jam Kaggle; GitHub Actions akan menyalakan lagi)
+# CELL 6 - JAGA SESI HIDUP (sampai batas 12 jam Kaggle; watchdog GitHub Actions akan menyalakan lagi)
+START = time.time()
 while True:
     time.sleep(300)
+    # Selesai sendiri sedikit sebelum batas 12 jam supaya watchdog langsung menyalakan sesi baru
+    if time.time() - START > 11.5 * 3600:
+        upstash(f"del/{quote(REG_KEY, safe='')}")
+        print("Hampir 12 jam -> akhiri sesi, watchdog akan menyalakan ulang", flush=True)
+        os._exit(0)
