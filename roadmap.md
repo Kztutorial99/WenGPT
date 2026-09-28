@@ -57,3 +57,4 @@
 - [x] Gabungkan WEBH.md ke instruksi utama AGENT.md agar AI selalu tahu persona WEBH tanpa diingatkan
 - [x] Rombak tampilan cyberpunk sesuai screenshot: rangka sudut lancip, tab menu Beranda/File/Tools/Chat/Pengaturan, hero, kartu pesan beraksi, komposer baru; uji lalu push
 - Tepi tombol menu (cyber-chip) di header dibuat jelas terlihat
+- Animasi putar ikon WenGPT lebih terlihat, durasi putar ~4 detik baru berhenti

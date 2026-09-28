@@ -106,11 +106,12 @@
 .brand-mark { animation: wengpt-mark-reveal 0.7s cubic-bezier(0.2, 0.8, 0.2, 1.1) both; }
 .brand-mark > svg { animation: wengpt-symbol-cycle 10s ease-in-out infinite 1s; }
 @keyframes wengpt-hero-spin {
-  0%, 55% { transform: rotate(0) scale(1); filter: drop-shadow(0 0 0 transparent); }
-  70% { transform: rotate(200deg) scale(1.12); filter: drop-shadow(0 0 8px var(--mark-glow)); }
-  85%, 100% { transform: rotate(360deg) scale(1); filter: drop-shadow(0 0 0 transparent); }
+  0%, 12% { transform: rotate(0) scale(1); filter: drop-shadow(0 0 0 transparent); }
+  20% { transform: rotate(90deg) scale(1.2); filter: drop-shadow(0 0 10px var(--mark-glow)); }
+  66% { transform: rotate(360deg) scale(1.2); filter: drop-shadow(0 0 10px var(--mark-glow)); }
+  74%, 100% { transform: rotate(360deg) scale(1); filter: drop-shadow(0 0 0 transparent); }
 }
-.brand-hero > svg { animation: wengpt-hero-spin 7s cubic-bezier(.45,.05,.25,1) infinite 1s; }
+.brand-hero > svg { animation: wengpt-hero-spin 7s cubic-bezier(.5,.05,.35,1) infinite 1s; }
 
 @media (prefers-reduced-motion: reduce) {
   .brand-mark, .brand-mark > svg, .brand-hero > svg { animation: none; }
