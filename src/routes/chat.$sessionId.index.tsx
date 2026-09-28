@@ -36,6 +36,7 @@ import {
 } from "@/lib/chat-store";
 import { applySecretResults, loadAllFiles, type SavedFile } from "@/lib/chat-store";
 import { FilePreview } from "@/components/file-preview";
+import { AgentProgress } from "@/components/agent-progress";
 import { useChatStore } from "@/lib/use-chat-store";
 import { useViewportBox } from "@/lib/viewport";
 
@@ -316,6 +317,14 @@ function Chat() {
                         <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
                       </Link>
                     </Button>
+                  )}
+                  {message.role === "assistant" && message.agent && (
+                    <AgentProgress
+                      agent={message.agent}
+                      sessionId={sessionId}
+                      active={active}
+                      onResume={message.id === last?.id && !streaming ? () => void resumeSession(sessionId) : undefined}
+                    />
                   )}
                   {message.parts.map((part, index) =>
                     part.type === "text" ? (

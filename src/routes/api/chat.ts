@@ -100,6 +100,18 @@ Alur kerja (loop agen):
 5. Verifikasi: jalankan build/lint/test atau skrip nyata setelah perubahan. Baca exit code dan error. Jangan bilang "beres" sebelum terbukti jalan.
 6. Laporkan: ringkas apa yang dibuat/diubah, cara menjalankannya, dan yang belum selesai.
 
+[GERBANG PEMAHAMAN & KERJA EFISIEN - WAJIB UNTUK TUGAS CODING]
+- Sebelum alat apa pun yang mengubah proyek (write_file, edit_file, run_command, preview_app), WAJIB panggil set_intent dulu: status "clear" jika permintaan cukup jelas, atau "need_clarification" jika platform/target perangkat, jenis aplikasi, fitur utama, atau bentuk hasil belum jelas DAN perbedaannya mengubah implementasi secara signifikan. Permintaan singkat tidak otomatis jelas.
+- Jika need_clarification: JANGAN buat/edit file, jalankan perintah, install, buat database, jalankan server, atau pratinjau. Ajukan 1-3 pertanyaan terpenting saja lalu berhenti. Contoh: "Buatkan script C++ menu simple" -> "Siap. Targetnya mau dijalankan di Windows, Linux, Android/Termux, atau cross-platform?". Server akan menolak alat pengubah proyek di giliran itu.
+- Kalau info sudah ada di percakapan sebelumnya, jangan tanya ulang; langsung set_intent "clear". Jangan anggap info yang belum diberikan sebagai fakta.
+- Kode wajib sesuai platform target: Android/Termux atau Linux jangan pakai conio.h/windows.h; cross-platform utamakan standar bahasa. Jangan memperbaiki error platform dengan menebak.
+- Tahap kerja: pakai alat milestone untuk 3-6 tahap BESAR berorientasi hasil (mis. "Analisis kebutuhan", "Menyiapkan project", "Implementasi fitur", "Pengujian", "Preview"), bukan per alat. Tandai running saat mulai, done saat terverifikasi, failed/attention kalau gagal. Jangan tandai done kalau verifikasinya gagal.
+- Efisien: pahami sekali, rencana sekali, lalu kerjakan beberapa operasi yang jelas berturut-turut tanpa berpikir ulang panjang di antara tiap alat. Jangan baca file yang sama berkali-kali tanpa alasan, jangan ulang perintah yang sama tanpa perubahan. Tugas sederhana: pahami -> kerjakan -> tes -> selesai.
+- Error: baca error, cari file & baris (mis. main.cpp:42), perbaiki penyebabnya, tes ulang. Dilarang retry buta. Maks 3 percobaan untuk masalah yang sama, lalu jelaskan error sebenarnya, file/baris terkait, dan apa yang sudah dicoba - jangan klaim selesai.
+- Tes sesuai target: CLI = compile -> jalankan -> menu/output tampil -> tes input (pakai printf/echo pipe) -> keluar. Web = build -> server jalan -> curl cek -> baru preview_app. Compile lolos belum tentu selesai.
+- Jangan web_search otomatis saat coding; hanya jika diminta atau info eksternal memang diperlukan.
+- Laporan akhir tugas coding wajib lengkap dan tidak terpotong: apa yang dibuat, file utama yang berubah, hasil tes, cara menjalankan, dan masalah yang belum selesai (jika ada).
+
 Aturan kode:
 - Default stack jika pengguna tidak menentukan: web = Vite + React + TypeScript + Tailwind; backend/API = Node.js (Express) atau Python (FastAPI); database = SQLite (file lokal, via better-sqlite3 atau sqlite3 Python). Pakai PostgreSQL/MySQL hanya jika diminta dan bisa dipasang di sandbox.
 - Proyek baru dibuat di /home/user/projects/<nama-proyek>. Pakai scaffold resmi non-interaktif (mis. \`npm create vite@latest app -- --template react-ts\`, lalu \`npm install\`). Semua perintah harus non-interaktif (pakai -y / --yes); jangan jalankan perintah yang menunggu input.
@@ -298,6 +310,44 @@ function checkCommand(command: string): string | null {
 const clip = (s: string, n = 6000) =>
   s.length > n ? s.slice(0, n) + `\n...[dipotong ${s.length - n} karakter]` : s;
 
+// Diff baris sederhana: potong awalan & akhiran yang sama, sisanya = bagian yang berubah.
+function lineDiff(oldText: string, newText: string) {
+  const a = oldText ? oldText.split("\n") : [];
+  const b = newText.split("\n");
+  let pre = 0;
+  while (pre < a.length && pre < b.length && a[pre] === b[pre]) pre++;
+  let suf = 0;
+  while (suf < a.length - pre && suf < b.length - pre && a[a.length - 1 - suf] === b[b.length - 1 - suf]) suf++;
+  const removed = a.slice(pre, a.length - suf);
+  const added = b.slice(pre, b.length - suf);
+  const start = pre + 1;
+  const end = Math.max(start, pre + added.length);
+  const body = [
+    `@@ L${start}${end > start ? `–${end}` : ""} @@`,
+    ...removed.slice(0, 200).map((l) => `-${l}`),
+    ...added.slice(0, 200).map((l) => `+${l}`),
+  ].join("\n");
+  return { ranges: [[start, end]] as [number, number][], diff: body.slice(0, 20000), added: added.length, removed: removed.length };
+}
+
+// Ambil lokasi error compiler/runtime: file.ext:42 atau file.ext:42:7
+function errorLocations(text: string) {
+  const out: { file: string; line: number }[] = [];
+  const re = /([A-Za-z0-9_./-]+\.(?:c|cc|cpp|cxx|h|hpp|py|js|jsx|ts|tsx|java|kt|rs|go|rb|php|cs|swift|vue|svelte|json|html|css))[:(](\d{1,6})/g;
+  for (const m of text.matchAll(re)) {
+    const loc = { file: m[1]!, line: Number(m[2]) };
+    if (!out.some((o) => o.file === loc.file && o.line === loc.line)) out.push(loc);
+    if (out.length >= 10) break;
+  }
+  return out;
+}
+
+const hashOp = (s: string) => {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  return (h >>> 0).toString(36);
+};
+
 type Ev =
   | { t: "text"; v: string }
   | { t: "think"; v: string }
@@ -305,7 +355,13 @@ type Ev =
   | { t: "sandbox_reset" }
   | { t: "tool"; id: string; name: string; input: unknown; at: number }
   | { t: "result"; id: string; output: unknown; at: number; durationMs: number }
-  | { t: "error"; v: string };
+  | { t: "error"; v: string }
+  | { t: "status"; state: string; label?: string; detail?: string | undefined }
+  | { t: "milestone"; id: string; title: string; status: "pending" | "running" | "done" | "failed" | "attention"; detail?: string | undefined }
+  | { t: "file"; path: string; op: "create" | "edit" | "write"; ranges: [number, number][]; diff: string; added: number; removed: number; opId: string }
+  | { t: "hb" }
+  | { t: "task"; taskId: string; resumed: boolean }
+  | { t: "done"; ok: boolean; state: string; reasons: string[] };
 
 const streamHeaders = {
   "Content-Type": "application/x-ndjson; charset=utf-8",
@@ -448,6 +504,7 @@ export const Route = createFileRoute("/api/chat")({
           files?: SharedFile[];
           attachments?: Attachment[];
           secrets?: { name: string; service: string; value: string }[];
+          taskId?: string;
         };
         try {
           body = (await request.json()) as typeof body;
@@ -497,7 +554,18 @@ export const Route = createFileRoute("/api/chat")({
 
         const encoder = new TextEncoder();
         let controllerRef: ReadableStreamDefaultController<Uint8Array> | null = null;
-        const emit = (e: Ev) => controllerRef?.enqueue(encoder.encode(JSON.stringify(e) + "\n"));
+        const taskId = typeof body.taskId === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(body.taskId) ? body.taskId : `task-${Date.now().toString(36)}`;
+        let seq = 0;
+        const eventLog: string[] = [];
+        const emit = (e: Ev) => {
+          const line = JSON.stringify({ ...e, seq: ++seq, ts: Date.now() });
+          if (e.t !== "hb" && e.t !== "text") eventLog.push(line);
+          try {
+            controllerRef?.enqueue(encoder.encode(line + "\n"));
+          } catch {
+            /* stream browser sudah tertutup; pekerjaan tetap dicatat */
+          }
+        };
 
         let sandbox: Sandbox | null = null;
         const getSandbox = async () => {
@@ -552,7 +620,119 @@ export const Route = createFileRoute("/api/chat")({
         let searchCalls = 0;
         const readFiles = new Set<string>();
         const todoState: { items: { text: string; done: boolean }[] } = { items: [] };
+        // ===== State agent (checkpoint) =====
+        type Ckpt = {
+          taskId: string;
+          sessionHint: string;
+          state: string;
+          milestones: { id: string; title: string; status: string; detail?: string | undefined }[];
+          lastOpId: string | null;
+          lastOp: string | null;
+          ops: Record<string, { name: string; ok: boolean; summary: string; at: number }>;
+          files: { path: string; op: string; ranges: [number, number][]; diff: string; opId: string; at: number }[];
+          lastTest: { command: string; exitCode: number; at: number } | null;
+          lastError: { message: string; locations: { file: string; line: number }[]; at: number } | null;
+          updatedAt: number;
+        };
+        const ckptDir = "/home/user/.wengpt";
+        const ckptPath = `${ckptDir}/checkpoint-${taskId}.json`;
+        let ckpt: Ckpt = {
+          taskId, sessionHint: "", state: "UNDERSTANDING", milestones: [], lastOpId: null, lastOp: null,
+          ops: {}, files: [], lastTest: null, lastError: null, updatedAt: Date.now(),
+        };
+        let resumed = false;
+        if (body.sandboxId) {
+          try {
+            const sb = await getSandbox();
+            if (await sb.files.exists(ckptPath).catch(() => false)) {
+              ckpt = { ...ckpt, ...(JSON.parse(await sb.files.read(ckptPath)) as Ckpt) };
+              resumed = true;
+            }
+          } catch {
+            /* tidak ada checkpoint lama */
+          }
+        }
+        let intent: "unknown" | "clear" | "need_clarification" = resumed ? "clear" : "unknown";
+        let commandRunning = 0;
+        let unresolvedError = false;
+        const setState = (state: string, detail?: string) => {
+          if (ckpt.state === state && !detail) return;
+          ckpt.state = state;
+          const labels: Record<string, string> = {
+            UNDERSTANDING: "Memahami kebutuhan", WAITING_FOR_CLARIFICATION: "Menunggu jawaban Anda", PLANNING: "Merencanakan",
+            EXECUTING: "Mengerjakan project", TESTING: "Menguji aplikasi", FIXING: "Memperbaiki error", PREVIEWING: "Menyiapkan pratinjau",
+            COMPLETED: "Selesai", FAILED: "Pekerjaan berhenti karena error", ATTENTION: "Perlu perhatian",
+          };
+          emit({ t: "status", state, label: labels[state] ?? state, detail });
+        };
+        const saveCkpt = async () => {
+          if (!sandbox) return;
+          ckpt.updatedAt = Date.now();
+          try {
+            await sandbox.files.write(ckptPath, JSON.stringify(ckpt));
+          } catch {
+            /* checkpoint gagal disimpan tidak menghentikan pekerjaan */
+          }
+        };
+        const MUTATING = new Set(["write_file", "edit_file", "run_command", "preview_app"]);
+        const gate = (name: string) =>
+          MUTATING.has(name) && intent === "need_clarification"
+            ? { ok: false, error: "Ditolak: permintaan masih perlu klarifikasi. Ajukan pertanyaan ke pengguna dulu, jangan jalankan alat pengubah proyek." }
+            : null;
+        const recordOp = async (opId: string, name: string, ok: boolean, summary: string) => {
+          ckpt.ops[opId] = { name, ok, summary: summary.slice(0, 300), at: Date.now() };
+          if (ok) {
+            ckpt.lastOpId = opId;
+            ckpt.lastOp = `${name}: ${summary.slice(0, 200)}`;
+          }
+          await saveCkpt();
+        };
+        const doneOp = (opId: string) => ckpt.ops[opId]?.ok === true;
+        const emitFile = (path: string, op: "create" | "edit" | "write", oldText: string, newText: string, opId: string) => {
+          const d = lineDiff(oldText, newText);
+          ckpt.files.push({ path, op, ranges: d.ranges, diff: d.diff, opId, at: Date.now() });
+          if (ckpt.files.length > 200) ckpt.files.splice(0, ckpt.files.length - 200);
+          emit({ t: "file", path, op, ranges: d.ranges, diff: d.diff, added: d.added, removed: d.removed, opId });
+          return d;
+        };
         const tools = {
+          set_intent: tool({
+            description:
+              "WAJIB untuk tugas coding sebelum alat pengubah proyek. status 'clear' = boleh dikerjakan; 'need_clarification' = tanya 1-3 hal penting dulu (alat pengubah proyek akan ditolak di giliran ini).",
+            inputSchema: z.object({
+              status: z.enum(["clear", "need_clarification"]),
+              summary: z.string().describe("Ringkasan singkat apa yang akan dibuat / apa yang belum jelas"),
+            }),
+            execute: async ({ status, summary }) => {
+              intent = status;
+              setState(status === "clear" ? "PLANNING" : "WAITING_FOR_CLARIFICATION", summary.slice(0, 200));
+              return { ok: true, status };
+            },
+          }),
+          milestone: tool({
+            description:
+              "Perbarui tahap kerja besar berorientasi hasil (3-6 tahap per tugas, mis. 'Analisis kebutuhan', 'Implementasi fitur', 'Pengujian'). status: pending/running/done/failed/attention. Jangan buat tahap per alat.",
+            inputSchema: z.object({
+              id: z.string().describe("id pendek stabil, mis. 'impl'"),
+              title: z.string(),
+              status: z.enum(["pending", "running", "done", "failed", "attention"]),
+              detail: z.string().optional(),
+            }),
+            execute: async ({ id, title, status, detail }) => {
+              const m = ckpt.milestones.find((x) => x.id === id);
+              if (m) Object.assign(m, { title, status, detail });
+              else ckpt.milestones.push({ id, title, status, detail });
+              emit({ t: "milestone", id, title, status, detail });
+              if (status === "running") {
+                if (/tes|test|uji|verif/i.test(title)) setState("TESTING");
+                else if (/preview|pratinjau/i.test(title)) setState("PREVIEWING");
+                else if (/perbaik|fix/i.test(title)) setState("FIXING");
+                else setState("EXECUTING");
+              }
+              await saveCkpt();
+              return { ok: true, milestones: ckpt.milestones };
+            },
+          }),
            web_search: tool({
              description: `Cari informasi terbaru di internet. Tanggal hari ini ${today} (Makassar). Pakai tahun berjalan untuk info terbaru. Hasil langsung dikembalikan tanpa file.`,
             inputSchema: z.object({ query: z.string().min(1).describe("Kata kunci pencarian yang spesifik") }),
@@ -587,6 +767,29 @@ export const Route = createFileRoute("/api/chat")({
             execute: async ({ command }) => {
               const blocked = checkCommand(command);
               if (blocked) return { ok: false, exitCode: 126, error: blocked };
+              const g = gate("run_command");
+              if (g) return { ...g, exitCode: 126 };
+              const opId = `cmd-${hashOp(command)}`;
+              const isInstall = /\b(npm|pnpm|yarn|bun)\s+(i|install|add)\b|\bpip3?\s+install\b|\bapt(-get)?\s+install\b/.test(command);
+              if (isInstall && doneOp(opId))
+                return { exitCode: 0, skipped: true, stdout: "(dilewati: install yang sama sudah berhasil sebelumnya di tugas ini)", stderr: "" };
+              const isTest = /\b(g\+\+|gcc|clang|make|cmake|javac|rustc|cargo|go (build|run|test)|tsc|vite build|npm (run )?(build|test)|pytest|python3? .*test|curl)\b/.test(command);
+              if (isTest) setState("TESTING", command.slice(0, 120));
+              commandRunning++;
+              const finish = async (exitCode: number, stdout: string, stderr: string) => {
+                const locations = exitCode !== 0 ? errorLocations(`${stderr}\n${stdout}`) : [];
+                if (isTest) ckpt.lastTest = { command: command.slice(0, 300), exitCode, at: Date.now() };
+                if (exitCode !== 0) {
+                  unresolvedError = true;
+                  ckpt.lastError = { message: (stderr || stdout).slice(0, 1500), locations, at: Date.now() };
+                  setState("FIXING", locations[0] ? `${locations[0].file}:${locations[0].line}` : undefined);
+                } else if (isTest) {
+                  unresolvedError = false;
+                  ckpt.lastError = null;
+                }
+                await recordOp(opId, "run_command", exitCode === 0, command);
+                return locations;
+              };
               try {
                 const sb = await getSandbox();
                 const r = await sb.commands.run(command, {
@@ -594,10 +797,12 @@ export const Route = createFileRoute("/api/chat")({
                   cwd: "/home/user",
                   envs: secretEnvs,
                 });
+                const locations = await finish(r.exitCode, r.stdout, r.stderr);
                 return {
                   exitCode: r.exitCode,
                   stdout: clip(redact(r.stdout)),
                   stderr: clip(redact(r.stderr), 3000),
+                  errorLocations: locations.length ? locations : undefined,
                   dirs: await listDirs(sb),
                 };
               } catch (err: unknown) {
@@ -607,13 +812,19 @@ export const Route = createFileRoute("/api/chat")({
                   stderr?: string;
                   message?: string;
                 };
-                if (typeof e.exitCode === "number")
+                if (typeof e.exitCode === "number") {
+                  const locations = await finish(e.exitCode, e.stdout ?? "", e.stderr ?? "");
                   return {
                     exitCode: e.exitCode,
                     stdout: clip(redact(e.stdout ?? "")),
                     stderr: clip(redact(e.stderr ?? ""), 3000),
+                    errorLocations: locations.length ? locations : undefined,
                   };
+                }
+                await finish(-1, "", e.message ?? String(err));
                 return { exitCode: -1, stdout: "", stderr: redact(e.message ?? String(err)) };
+              } finally {
+                commandRunning--;
               }
             },
           }),
@@ -691,11 +902,24 @@ export const Route = createFileRoute("/api/chat")({
                 const p = sandboxPath(path);
                 if (typeof p !== "string") return { ok: false, error: p.error };
                 if (content.length > 2_000_000) return { ok: false, error: "File terlalu besar (maks 2 MB)." };
-                if (await sb.files.exists(p).catch(() => false) && !readFiles.has(p))
+                const g = gate("write_file");
+                if (g) return g;
+                const opId = `write-${hashOp(p + "\0" + content)}`;
+                const exists = await sb.files.exists(p).catch(() => false);
+                if (exists && !readFiles.has(p) && !doneOp(opId))
                   return { ok: false, path: p, error: "File ini sudah ada dan belum dibaca. Baca dulu dengan read_file sebelum menimpa." };
+                const oldText = exists ? await sb.files.read(p).catch(() => "") : "";
+                if (oldText === content) {
+                  readFiles.add(p);
+                  return { ok: true, path: p, bytes: content.length, skipped: true, note: "Isi sama, tidak ditulis ulang." };
+                }
                 await sb.commands.run(`mkdir -p "$(dirname '${p.replace(/'/g, "'\\''")}')"`, { cwd: "/home/user" }).catch(() => null);
                 await sb.files.write(p, content);
-                return { ok: true, path: p, bytes: content.length };
+                readFiles.add(p);
+                if (ckpt.state !== "FIXING") setState("EXECUTING", p);
+                const d = emitFile(p, exists ? "write" : "create", oldText, content, opId);
+                await recordOp(opId, "write_file", true, p);
+                return { ok: true, path: p, bytes: content.length, changedLines: d.ranges };
               } catch (err) {
                 return { ok: false, error: err instanceof Error ? err.message : String(err) };
               }
@@ -744,15 +968,22 @@ export const Route = createFileRoute("/api/chat")({
                 const p = sandboxPath(path);
                 if (typeof p !== "string") return { ok: false, error: p.error };
                 if (!readFiles.has(p)) return { ok: false, path: p, error: "Baca file ini dulu dengan read_file sebelum mengeditnya." };
+                const g = gate("edit_file");
+                if (g) return g;
                 const text = await sb.files.read(p);
                 const count = old_text ? text.split(old_text).length - 1 : 0;
+                if (count === 0 && doneOp(`edit-${hashOp(p + "\0" + old_text + "\0" + new_text)}`) && text.includes(new_text))
+                  return { ok: true, path: p, skipped: true, note: "Perubahan ini sudah diterapkan sebelumnya." };
                 if (count === 0)
                   return { ok: false, path: p, error: "old_text tidak ditemukan. Baca ulang file dengan read_file lalu salin teks persis." };
                 if (count > 1 && !replace_all)
                   return { ok: false, path: p, error: `old_text muncul ${count} kali. Tambah konteks agar unik, atau set replace_all.` };
                 const next = replace_all ? text.split(old_text).join(new_text) : text.replace(old_text, () => new_text);
+                const opId = `edit-${hashOp(p + "\0" + old_text + "\0" + new_text)}`;
                 await sb.files.write(p, next);
-                return { ok: true, path: p, replaced: replace_all ? count : 1, content: next.length <= 200_000 ? next : undefined };
+                const d = emitFile(p, "edit", text, next, opId);
+                await recordOp(opId, "edit_file", true, p);
+                return { ok: true, path: p, replaced: replace_all ? count : 1, changedLines: d.ranges, content: next.length <= 200_000 ? next : undefined };
               } catch (err) {
                 return { ok: false, error: err instanceof Error ? err.message : String(err) };
               }
@@ -818,7 +1049,16 @@ export const Route = createFileRoute("/api/chat")({
                 const check = await sb.commands
                   .run(`curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:${port}`, { timeoutMs: 10_000 })
                   .catch((e: { stdout?: string }) => ({ stdout: e?.stdout ?? "000" }));
+                const g = gate("preview_app");
+                if (g) return g;
+                setState("PREVIEWING", `port ${port}`);
+                const code = String(check.stdout ?? "").trim();
+                if (!/^[23]\d\d$/.test(code)) {
+                  unresolvedError = true;
+                  return { ok: false, port, localStatus: code || "000", error: "Server belum benar-benar berjalan di port ini (health check gagal). Jalankan server di background dengan --host 0.0.0.0, cek log, lalu coba lagi. Jangan beri link pratinjau." };
+                }
                 const url = `https://${sb.getHost(port)}`;
+                await recordOp(`preview-${port}`, "preview_app", true, url);
                 return { ok: true, port, url, localStatus: check.stdout, catatan: "Link aktif selama sandbox hidup (~15 menit), bukan deploy permanen." };
               } catch (err) {
                 return { ok: false, error: err instanceof Error ? err.message : String(err) };
@@ -929,7 +1169,7 @@ export const Route = createFileRoute("/api/chat")({
 
         const result = streamText({
           model: provider.chatModel(model),
-           system: `${SYSTEM_PROMPT}\n\nTanggal saat ini (waktu Makassar, UTC+8): ${today}. Untuk permintaan info terbaru, cari dengan tahun berjalan dan cek tanggal sumber sebelum menjawab.`,
+           system: `${SYSTEM_PROMPT}${resumed ? `\n\n[CHECKPOINT TUGAS ${taskId} - LANJUTKAN, JANGAN ULANG DARI AWAL]\nStatus terakhir: ${ckpt.state}. Operasi terakhir yang berhasil: ${ckpt.lastOp ?? "-"}.\nTahap: ${ckpt.milestones.map((m) => `${m.title}=${m.status}`).join(", ") || "-"}.\nFile yang sudah diubah: ${[...new Set(ckpt.files.map((f) => f.path))].join(", ") || "-"}.\nTes terakhir: ${ckpt.lastTest ? `${ckpt.lastTest.command} (exit ${ckpt.lastTest.exitCode})` : "-"}.\nError terakhir: ${ckpt.lastError ? ckpt.lastError.message.slice(0, 500) : "-"}.\nOperasi yang sudah berhasil tidak perlu diulang (server juga akan melewatinya). Lanjutkan dari operasi berikutnya yang belum berhasil. File yang sudah dibuat tetap ada; baca ulang dengan read_file sebelum mengedit.` : ""}\n\nTanggal saat ini (waktu Makassar, UTC+8): ${today}. Untuk permintaan info terbaru, cari dengan tahun berjalan dan cek tanggal sumber sebelum menjawab.`,
           messages: modelMessages,
           tools,
           stopWhen: stepCountIs(50),
@@ -942,13 +1182,13 @@ export const Route = createFileRoute("/api/chat")({
         let sentText = "";
         let sentThink = "";
         let sawFakeSecret = false;
+        let sentUnderstanding = false;
+        let streamFailed = false;
+        let finalText = "";
         let calledSecret = false;
         const pushText = (final: boolean) => {
           const { think, rest } = splitThink(rawText);
-          if (think.length > sentThink.length && think.startsWith(sentThink)) {
-            emit({ t: "think", v: redact(think.slice(sentThink.length)) });
-            sentThink = think;
-          }
+          if (think.length > sentThink.length && think.startsWith(sentThink)) sentThink = think;
           const clean = cleanModelText(rest, final);
           if (clean.length > sentText.length && clean.startsWith(sentText)) {
             emit({ t: "text", v: redact(clean.slice(sentText.length)) });
@@ -968,15 +1208,26 @@ export const Route = createFileRoute("/api/chat")({
         const stream = new ReadableStream<Uint8Array>({
           async start(controller) {
             controllerRef = controller;
+            emit({ t: "task", taskId, resumed });
+            {
+              const st = resumed ? ckpt.state : "UNDERSTANDING";
+              ckpt.state = "";
+              setState(st === "COMPLETED" || st === "FAILED" || st === "ATTENTION" ? "EXECUTING" : st);
+            }
+            const hb = setInterval(() => emit({ t: "hb" }), 5000);
             try {
               for await (const part of result.fullStream) {
                 if (part.type === "text-delta") {
                   rawText += part.text;
                   if (/tool[ _]?request_secret/i.test(rawText)) sawFakeSecret = true;
+                  finalText += part.text;
                   pushText(false);
                 } else if (part.type === "reasoning-delta") {
-                  const v = String(part.text ?? "");
-                  if (v) emit({ t: "think", v: redact(v) });
+                  // Isi pikiran model tidak dikirim ke layar; cukup status singkat.
+                  if (ckpt.state === "UNDERSTANDING" && !sentUnderstanding) {
+                    sentUnderstanding = true;
+                    setState("UNDERSTANDING");
+                  }
                 } else if (part.type === "finish-step") {
                   resetStep();
                 } else if (part.type === "tool-input-start") {
@@ -1006,6 +1257,7 @@ export const Route = createFileRoute("/api/chat")({
                   const reason =
                     part.error instanceof Error ? part.error.message : String(part.error);
                   emit({ t: "error", v: `Tidak bisa menghubungi server AI. ${reason}` });
+                  streamFailed = true;
                   cachedUrl = null;
                   break;
                 }
@@ -1022,13 +1274,43 @@ export const Route = createFileRoute("/api/chat")({
                 emit({ t: "text", v: "Silakan isi token di form di atas kotak pesan, lalu klik Terapkan." });
               }
             } catch (error) {
+              streamFailed = true;
               emit({
                 t: "error",
                 v: error instanceof Error ? error.message : "Error tidak diketahui",
               });
             } finally {
+              clearInterval(hb);
+              // Kontrak selesai: hanya ok jika semua syarat terpenuhi.
+              const reasons: string[] = [];
+              if (streamFailed || request.signal.aborted) reasons.push("Proses terhenti sebelum selesai.");
+              if (commandRunning > 0) reasons.push("Masih ada perintah yang berjalan.");
+              if (unresolvedError) reasons.push(ckpt.lastError?.locations[0] ? `Error belum teratasi di ${ckpt.lastError.locations[0].file}:${ckpt.lastError.locations[0].line}.` : "Masih ada error yang belum teratasi.");
+              const open = ckpt.milestones.filter((m) => m.status === "running" || m.status === "pending");
+              const bad = ckpt.milestones.filter((m) => m.status === "failed" || m.status === "attention");
+              if (open.length && intent !== "need_clarification") reasons.push(`Tahap belum selesai: ${open.map((m) => m.title).join(", ")}.`);
+              if (bad.length) reasons.push(`Tahap perlu perhatian: ${bad.map((m) => m.title).join(", ")}.`);
+              if (!cleanModelText(splitThink(finalText).rest, true).trim()) reasons.push("Jawaban akhir belum terbentuk.");
+              const waiting = intent === "need_clarification";
+              const ok = reasons.length === 0;
+              const state = waiting && ok ? "WAITING_FOR_CLARIFICATION" : ok ? "COMPLETED" : streamFailed || request.signal.aborted ? "FAILED" : "ATTENTION";
+              ckpt.state = state;
+              if (sandbox) {
+                await saveCkpt();
+                if (ok && !waiting) await sandbox.files.remove(ckptPath).catch(() => null);
+              }
+              emit({ t: "done", ok, state, reasons });
+              if (sandbox) {
+                const logPath = `${ckptDir}/events-${taskId}.ndjson`;
+                const prev = await sandbox.files.read(logPath).catch(() => "");
+                await sandbox.files.write(logPath, (prev ? prev : "") + eventLog.join("\n") + "\n").catch(() => null);
+              }
               controllerRef = null;
-              controller.close();
+              try {
+                controller.close();
+              } catch {
+                /* sudah tertutup */
+              }
             }
           },
         });

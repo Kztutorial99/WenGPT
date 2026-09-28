@@ -43,6 +43,7 @@ import {
   countUnder,
   createFolder,
   createTextFile,
+  getSession,
   duplicateFile,
   listFolders,
   folderPaths,
@@ -61,6 +62,8 @@ import {
 } from "@/lib/chat-store";
 import { loadAttachment } from "@/lib/attachment-store";
 import { FilePreview, kindOf, sandboxLink } from "@/components/file-preview";
+import { CodeView } from "@/components/code-view";
+import { FileIcon } from "@/components/file-icon";
 import { useChatStore } from "@/lib/use-chat-store";
 
 export const Route = createFileRoute("/chat/$sessionId/files")({
@@ -427,7 +430,19 @@ function FilesPage() {
   const snapshot = useChatStore();
   const files = loadAllFiles();
   const [dir, setDir] = useState(ROOT);
-  const [open, setOpen] = useState<string | null>(null);
+  const [open, setOpenRaw] = useState<string | null>(null);
+  const [line, setLine] = useState<number | undefined>(undefined);
+  const [tabs, setTabs] = useState<string[]>([]);
+  const [showDiff, setShowDiff] = useState(false);
+  const setOpen = (path: string | null) => {
+    setOpenRaw(path);
+    if (path) setTabs((t) => (t.includes(path) ? t : [...t, path].slice(-8)));
+  };
+  const changes = useMemo(
+    () => (getSession(sessionId)?.messages ?? []).flatMap((msg) => msg.agent?.files ?? []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [snapshot, sessionId],
+  );
   const [query, setQuery] = useState("");
   const [nameTarget, setNameTarget] = useState<NameTarget | null>(null);
   const [moveTarget, setMoveTarget] = useState<MoveTarget | null>(null);
@@ -436,7 +451,10 @@ function FilesPage() {
 
   useEffect(() => {
     markFilesRead();
-    const hash = decodeURIComponent(window.location.hash.slice(1));
+    const raw = decodeURIComponent(window.location.hash.slice(1));
+    const m = /^(.*?):(\d+)$/.exec(raw);
+    const hash = m ? m[1]! : raw;
+    if (m) setLine(Number(m[2]));
     if (hash) {
       const path = normalizePath(hash);
       setOpen(path);
@@ -788,7 +806,7 @@ function FilesPage() {
                     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center">
                       <RowButton
                         onClick={() => setOpen(hit.file.path)}
-                        icon={<FileText className="size-4 text-primary" />}
+                        icon={<FileIcon path={hit.file.path} />}
                         title={
                           <Highlight text={name(hit.file.path)} query={q} />
                         }
@@ -908,7 +926,7 @@ function FilesPage() {
                     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center">
                       <RowButton
                         onClick={() => setOpen(file.path)}
-                        icon={<FileText className="size-4 text-primary" />}
+                        icon={<FileIcon path={file.path} />}
                         title={name(file.path)}
                         meta={file.size != null ? formatSize(file.size) : undefined}
                       />
@@ -957,7 +975,57 @@ function FilesPage() {
               </Button>
             </div>
           </div>
-          <FilePreview key={active.key ?? active.path} file={active} className="min-h-0 flex-1" />
+          {tabs.length > 1 && (
+            <div className="flex gap-1 overflow-x-auto border-b border-border/60 px-2 py-1" role="tablist">
+              {tabs.map((t) => (
+                <div key={t} className={`flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[11px] ${t === active.path ? "bg-muted text-foreground" : "text-muted-foreground"}`}>
+                  <button type="button" role="tab" aria-selected={t === active.path} className="flex items-center gap-1" onClick={() => { setLine(undefined); setOpen(t); }}>
+                    <FileIcon path={t} className="size-3.5" />
+                    {name(t)}
+                    {changes.some((c) => c.path === t) && <span className="size-1.5 rounded-full bg-warning" aria-label="Diubah agent" />}
+                  </button>
+                  <button type="button" aria-label={`Tutup ${name(t)}`} onClick={() => setTabs((all) => all.filter((x) => x !== t))}>
+                    <X className="size-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          {(() => {
+            const fileChanges = changes.filter((c) => c.path === active.path);
+            const isCode = kindOf(active) === "text" && !!active.content;
+            return (
+              <>
+                <div className="flex items-center gap-2 border-b border-border/60 px-3 py-1 text-[11px] text-muted-foreground">
+                  <span>{fileChanges.length ? "Diedit agent" : "Hanya baca"}</span>
+                  {fileChanges.length > 0 && (
+                    <>
+                      <span>· {fileChanges.length} perubahan</span>
+                      <button type="button" className="ml-auto underline" onClick={() => setShowDiff((v) => !v)}>
+                        {showDiff ? "Lihat kode" : "Lihat diff"}
+                      </button>
+                    </>
+                  )}
+                  {isCode && !fileChanges.length && <span className="ml-auto">Cari: Ctrl/Cmd+F</span>}
+                </div>
+                {showDiff && fileChanges.length ? (
+                  <div className="min-h-0 flex-1 overflow-auto p-2">
+                    {fileChanges.slice().reverse().map((c) => (
+                      <pre key={c.opId} className="mb-2 rounded-md border border-border/60 bg-muted/40 p-2 font-mono text-[11px] leading-4">
+                        {c.diff.split("\n").map((l, i) => (
+                          <div key={i} className={l.startsWith("+") ? "text-success" : l.startsWith("-") ? "text-destructive" : "text-muted-foreground"}>{l || " "}</div>
+                        ))}
+                      </pre>
+                    ))}
+                  </div>
+                ) : isCode ? (
+                  <CodeView key={active.key ?? active.path} path={active.path} content={active.content} line={line} className="min-h-0 flex-1" />
+                ) : (
+                  <FilePreview key={active.key ?? active.path} file={active} className="min-h-0 flex-1" />
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
 

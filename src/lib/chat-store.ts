@@ -46,10 +46,24 @@ export type Part =
   | { type: "think"; text: string }
   | { type: "tool"; run: ToolRun }
   | { type: "cancelled" };
+export type AgentMilestone = { id: string; title: string; status: "pending" | "running" | "done" | "failed" | "attention"; detail?: string | undefined };
+export type AgentFileChange = { path: string; op: "create" | "edit" | "write"; ranges: [number, number][]; diff: string; added: number; removed: number; opId: string; at: number };
+export type AgentState = {
+  taskId: string;
+  state: string;
+  label?: string | undefined;
+  detail?: string | undefined;
+  milestones: AgentMilestone[];
+  files: AgentFileChange[];
+  lastSeq: number;
+  done?: { ok: boolean; state: string; reasons: string[] } | undefined;
+  lastBeat?: number | undefined;
+};
 export type MessageData = {
   id: string;
   role: "user" | "assistant";
   parts: Part[];
+  agent?: AgentState | undefined;
   createdAt: number;
   files?: { name: string; mediaType: string; size?: number | undefined }[];
 };
@@ -364,6 +378,28 @@ function patchSession(id: string, updater: (session: ChatSession) => ChatSession
     sessions.map((session) => (session.id === id ? updater(session) : session)),
   );
 }
+function patchAgent(sessionId: string, assistantId: string, update: (agent: AgentState) => AgentState) {
+  patchSession(sessionId, (current) => ({
+    ...current,
+    messages: current.messages.map((m) =>
+      m.id === assistantId
+        ? { ...m, agent: update(m.agent ?? { taskId: assistantId, state: "UNDERSTANDING", milestones: [], files: [], lastSeq: 0 }) }
+        : m,
+    ),
+  }));
+}
+
+/** Ubah error teknis jadi penjelasan yang bisa dipahami pengguna. */
+export function humanError(raw: string): string {
+  const t = raw.toLowerCase();
+  if (typeof navigator !== "undefined" && !navigator.onLine) return "Internet sedang terputus. Pekerjaan tersimpan; akan disambung saat online lagi.";
+  if (/abort/.test(t)) return "Permintaan dibatalkan.";
+  if (/failed to fetch|fetch failed|network|load failed|stream|terminated|econnreset/.test(t)) return "Koneksi ke WenGPT terputus. Pekerjaan tersimpan — tekan Lanjutkan untuk menyambung.";
+  if (/server ai|provider|model|rate limit|429|quota/.test(t)) return "Layanan AI sedang bermasalah. Coba lanjutkan sebentar lagi.";
+  if (/5\d\d|internal|server/.test(t)) return "Server WenGPT sedang bermasalah. Coba lanjutkan sebentar lagi.";
+  return raw.replace(/\n\s+at .*/g, "").slice(0, 300);
+}
+
 function patchAssistant(
   sessionId: string,
   assistantId: string,
@@ -486,6 +522,7 @@ async function runTurn({
       signal: controller.signal,
       body: JSON.stringify({
         sessionId,
+        taskId: assistantId.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 80),
         sandboxId: getSession(sessionId)?.sandboxId ?? null,
         files: loadAllFiles()
           .filter((file) => !file.failed && !file.attachmentId && !file.truncated)
@@ -526,6 +563,7 @@ async function runTurn({
     });
     if (!response.ok || !response.body)
       throw new Error((await response.text()) || "WenGPT Prime tidak merespons.");
+    let sawDone = false;
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
@@ -556,6 +594,49 @@ async function runTurn({
               ? [...parts.slice(0, -1), { type: "think", text: last.text + valueText }]
               : [...parts, { type: "think", text: valueText }];
           });
+        } else if (typeof event["seq"] === "number" && ["status", "milestone", "file", "done", "task", "hb"].includes(event.t)) {
+          const seq = Number(event["seq"]);
+          if (event.t === "done") sawDone = true;
+          patchAgent(sessionId, assistantId, (agent) => {
+            const next: AgentState = { ...agent, lastSeq: seq, lastBeat: Date.now() };
+            if (event.t === "task") {
+              next.taskId = String(event["taskId"]);
+              next.done = undefined;
+              if (next.state === "DISCONNECTED") next.state = "EXECUTING";
+            } else if (event.t === "status") {
+              next.state = String(event["state"]);
+              next.label = event["label"] ? String(event["label"]) : undefined;
+              next.detail = event["detail"] ? String(event["detail"]) : undefined;
+            } else if (event.t === "milestone") {
+              const m: AgentMilestone = {
+                id: String(event["id"]),
+                title: String(event["title"]),
+                status: event["status"] as AgentMilestone["status"],
+                detail: event["detail"] ? String(event["detail"]) : undefined,
+              };
+              next.milestones = agent.milestones.some((x) => x.id === m.id)
+                ? agent.milestones.map((x) => (x.id === m.id ? m : x))
+                : [...agent.milestones, m];
+            } else if (event.t === "file") {
+              const f: AgentFileChange = {
+                path: String(event["path"]),
+                op: event["op"] as AgentFileChange["op"],
+                ranges: (event["ranges"] as [number, number][]) ?? [],
+                diff: String(event["diff"] ?? ""),
+                added: Number(event["added"]) || 0,
+                removed: Number(event["removed"]) || 0,
+                opId: String(event["opId"]),
+                at: Number(event["ts"]) || Date.now(),
+              };
+              next.files = [...agent.files.filter((x) => x.opId !== f.opId), f].slice(-100);
+              next.detail = `${f.path.split("/").pop()} · L${f.ranges[0]?.[0] ?? 1}${f.ranges[0] && f.ranges[0][1] > f.ranges[0][0] ? `–${f.ranges[0][1]}` : ""}`;
+            } else if (event.t === "done") {
+              next.done = { ok: !!event["ok"], state: String(event["state"]), reasons: (event["reasons"] as string[]) ?? [] };
+              next.state = next.done.state;
+            }
+            return next;
+          });
+          if (event.t === "file") void syncSandboxFiles(sessionId);
         } else if (event.t === "sandbox") {
           patchSession(sessionId, (current) => ({ ...current, sandboxId: String(event["id"]) }));
         } else if (event.t === "sandbox_reset") {
@@ -620,12 +701,12 @@ async function runTurn({
         }
       }
     }
+    if (!sawDone && !controller.signal.aborted)
+      patchAgent(sessionId, assistantId, (agent) => ({ ...agent, state: "DISCONNECTED", label: "Koneksi terputus — pekerjaan tetap tersimpan" }));
   } catch (error) {
-    if (!controller.signal.aborted && (error as Error).name !== "AbortError")
-      patchAssistant(sessionId, assistantId, (parts) => [
-        ...parts,
-        { type: "text", text: `\n\n**${(error as Error).message}**` },
-      ]);
+    if (!controller.signal.aborted && (error as Error).name !== "AbortError") {
+      patchAgent(sessionId, assistantId, (agent) => ({ ...agent, state: "DISCONNECTED", label: humanError((error as Error).message) }));
+    }
   } finally {
     if (controllers.get(sessionId) === controller) controllers.delete(sessionId);
     if (!controller.signal.aborted) {
@@ -714,8 +795,10 @@ export async function resumeSession(sessionId: string) {
   const session = getSession(sessionId);
   if (!session || isStreaming(sessionId)) return;
   const last = session.messages.at(-1);
-  if (!last || last.role !== "assistant" || !last.parts.some((part) => part.type === "cancelled"))
-    return;
+  if (!last || last.role !== "assistant") return;
+  const interrupted = last.parts.some((part) => part.type === "cancelled");
+  const disconnected = last.agent?.state === "DISCONNECTED" || last.agent?.state === "FAILED";
+  if (!interrupted && !disconnected) return;
   const cleaned: MessageData = {
     ...last,
     parts: last.parts.filter((part) => part.type !== "cancelled"),
@@ -1106,4 +1189,18 @@ export function applySecretResults(
       return { ...s, messages, updatedAt: Date.now() };
     }),
   );
+}
+
+// HP masuk background / internet putus bukan kegagalan: saat kembali aktif, sambung ulang tugas yang terputus.
+if (typeof window !== "undefined") {
+  const reconnect = () => {
+    if (document.visibilityState !== "visible" || !navigator.onLine) return;
+    for (const session of state.sessions) {
+      const last = session.messages.at(-1);
+      if (last?.role === "assistant" && last.agent?.state === "DISCONNECTED" && !isStreaming(session.id))
+        void resumeSession(session.id);
+    }
+  };
+  document.addEventListener("visibilitychange", reconnect);
+  window.addEventListener("online", reconnect);
 }
