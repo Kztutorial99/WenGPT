@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Fragment, useEffect, useState } from "react";
 import { Check, CheckCheck, ChevronRight, CircleUserRound, Code2, Copy, Crown, FileText, GitBranch, Globe, Image as ImageIcon, Maximize2, Menu, Minimize2, MoreVertical, Paperclip, Plus, RotateCcw, SendHorizontal, Sparkles, ThumbsDown, ThumbsUp, Video, X } from "lucide-react";
 import { WenGptMark } from "@/components/wen-gpt-mark";
@@ -247,6 +247,7 @@ function Chat() {
   const box = useViewportBox();
   const streaming = snapshot.streamingIds.includes(sessionId);
   const last = session?.messages.at(-1);
+  const navigate = useNavigate();
   const checkpoints = loadCheckpoints(sessionId);
   // Form secret terbaru yang masih menunggu diisi, ditampilkan sebagai panel di atas kotak pesan.
   const lastAssistant = session?.messages.filter((m) => m.role === "assistant").at(-1);
@@ -260,9 +261,9 @@ function Chat() {
   useEffect(() => {
     if (snapshot.ready && !session) {
       const id = createSession();
-      window.location.replace(`/chat/${id}`);
+      void navigate({ to: "/chat/$sessionId", params: { sessionId: id }, replace: true });
     } else if (session) setActiveSession(sessionId);
-  }, [snapshot.ready, session, sessionId]);
+  }, [snapshot.ready, session, sessionId, navigate]);
   const submit = (text: string, files: PromptInputMessage["files"] = []) => {
     const value = text.trim();
     // Saat AI masih menjawab, lempar agar teks & lampiran tidak dibersihkan.
@@ -315,7 +316,7 @@ function Chat() {
               className="size-9 shrink-0 text-muted-foreground hover:text-primary"
               onClick={() => {
                 const id = createSession();
-                window.location.assign(`/chat/${id}`);
+                void navigate({ to: "/chat/$sessionId", params: { sessionId: id } });
               }}
             >
               <Plus className="size-4" />
