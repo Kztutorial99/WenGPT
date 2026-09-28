@@ -266,7 +266,7 @@ function TerminalPage() {
           : "Gagal";
 
   return (
-    <main className="fixed inset-0 flex h-dvh flex-col bg-background text-foreground">
+    <main className="flex flex-1 flex-col overflow-hidden">
       <header className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-border/60 bg-background/88 px-4 py-3 backdrop-blur-xl">
         <Button asChild variant="outline" size="icon">
           <Link to="/chat/$sessionId" params={{ sessionId }} aria-label="Kembali ke chat">

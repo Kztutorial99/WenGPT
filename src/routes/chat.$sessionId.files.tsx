@@ -708,7 +708,7 @@ function FilesPage() {
   const previewActions = active ? fileActions(active) : [];
 
   return (
-    <main className="h-dvh overflow-y-auto bg-background text-foreground">
+    <main className="flex-1 overflow-y-auto">
       <div className="sticky top-0 z-20 border-b border-border/60 bg-background/88 backdrop-blur-xl">
         <header className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3">
           <Button asChild variant="outline" size="icon">

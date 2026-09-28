@@ -50,23 +50,31 @@
 @utility cyber-frame {
   --cut: 14px;
   position: relative;
-  padding: 2px;
-  background: linear-gradient(150deg, var(--primary), color-mix(in oklab, var(--primary) 55%, transparent) 38%, color-mix(in oklab, var(--primary) 55%, transparent) 62%, var(--primary));
+  padding: 1.5px;
+  background: linear-gradient(150deg, var(--brand-line), color-mix(in oklab, var(--brand-line) 20%, transparent) 38%, color-mix(in oklab, var(--brand-line) 20%, transparent) 62%, var(--brand-line));
   clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
   filter: drop-shadow(0 0 14px color-mix(in oklab, var(--primary) 16%, transparent));
 }
 @utility cyber-frame-inner {
   background: color-mix(in oklab, var(--card) 94%, transparent);
-  clip-path: polygon(calc(var(--cut) - 1px) 0, 100% 0, 100% calc(100% - var(--cut) + 1px), calc(100% - var(--cut) + 1px) 100%, 0 100%, 0 calc(var(--cut) - 1px));
+  clip-path: polygon(calc(var(--cut) - 1.5px) 0, 100% 0, 100% calc(100% - var(--cut) + 1.5px), calc(100% - var(--cut) + 1.5px) 100%, 0 100%, 0 calc(var(--cut) - 1.5px));
 }
-/* Kartu pesan AI: sudut lancip ringan dengan garis neon. */
+/* Kartu pesan AI: satu-satunya dengan garis miring neon tebal yang jelas. */
 @utility cyber-card {
   position: relative;
-  border: 1px solid var(--brand-line);
-  background: color-mix(in oklab, var(--card) 82%, transparent);
-  clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
   padding: .9rem 1rem;
+  clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+  background: linear-gradient(150deg, var(--primary), color-mix(in oklab, var(--primary) 45%, transparent) 40%, color-mix(in oklab, var(--primary) 45%, transparent) 60%, var(--primary));
+  filter: drop-shadow(0 0 12px color-mix(in oklab, var(--primary) 15%, transparent));
 }
+.cyber-card::before {
+  content: "";
+  position: absolute;
+  inset: 1.5px;
+  clip-path: polygon(10.5px 0, 100% 0, 100% calc(100% - 10.5px), calc(100% - 10.5px) 100%, 0 100%, 0 10.5px);
+  background: color-mix(in oklab, var(--card) 88%, transparent);
+}
+.cyber-card > * { position: relative; z-index: 1; }
 /* Tombol kotak kecil dengan sudut terpotong (menu, aksi). */
 @utility cyber-chip {
   border: 1px solid var(--brand-line);

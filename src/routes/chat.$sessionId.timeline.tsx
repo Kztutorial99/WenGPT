@@ -112,7 +112,7 @@ function Timeline() {
   const failed = !!agent && agentDone && agent.done ? !agent.done.ok : false;
   const pending = !active && !agentDone && runs.some((run) => !run.output);
   return (
-    <main className="h-dvh min-w-0 overflow-y-auto overscroll-contain bg-background text-foreground">
+    <main className="flex-1 min-w-0 overflow-y-auto overscroll-contain">
       <header className="sticky top-0 z-20 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-border/60 bg-background/88 px-4 py-3 backdrop-blur-xl sm:px-6">
         <Button asChild variant="outline" size="icon">
           <Link to="/chat/$sessionId" params={{ sessionId }}>
