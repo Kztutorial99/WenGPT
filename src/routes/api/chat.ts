@@ -24,7 +24,8 @@ function cleanModelText(raw: string, final: boolean) {
   let tail = final ? "" : t.slice(lastNl + 1);
   body = body.replace(FAKE_TOOL_JSON, "").replace(FAKE_TOOL_LINE, "").replace(/\n{3,}/g, "\n\n");
   // Tahan baris terakhir yang mungkin awal dari pola yang disaring.
-  if (/^[ \t>*_`]*(t(o(o(l.*)?)?)?|\[(t(h.*)?)?|<(t(h.*)?)?)$/i.test(tail)) tail = "";
+  // Tahan hanya potongan pendek yang mungkin awal pola tool/think; teks biasa langsung mengalir per kata.
+  if (tail.length < 24 && /^[ \t>*_`]*(t(o(o(l[\w ]*)?)?)?|\[(t(h\w*)?)?|<(t(h\w*)?)?)$/i.test(tail)) tail = "";
   return (body + tail).replace(/^\s+/, "");
 }
 
@@ -1094,7 +1095,7 @@ export const Route = createFileRoute("/api/chat")({
             : body.mode === "webh" && lastText.length < 60 ? "webh" : "prime";
         const result = streamText({
           model: provider.chatModel(model),
-            system: `${PRIME_PROMPT}\n\n[MODE VISUAL]\nTema giliran ini: ${turnMode === "webh" ? "WEBH (persona MODE WEBH aktif)" : "Prime"}. Tema sudah dipilih server; jangan membahasnya, langsung jawab.${resumed ? `\n\n[CHECKPOINT TUGAS ${taskId} - LANJUTKAN, JANGAN ULANG DARI AWAL]\nStatus terakhir: ${ckpt.state}. Operasi terakhir yang berhasil: ${ckpt.lastOp ?? "-"}.\nTahap: ${ckpt.milestones.map((m) => `${m.title}=${m.status}`).join(", ") || "-"}.\nFile yang sudah diubah: ${[...new Set(ckpt.files.map((f) => f.path))].join(", ") || "-"}.\nTes terakhir: ${ckpt.lastTest ? `${ckpt.lastTest.command} (exit ${ckpt.lastTest.exitCode})` : "-"}.\nError terakhir: ${ckpt.lastError ? ckpt.lastError.message.slice(0, 500) : "-"}.\nOperasi yang sudah berhasil tidak perlu diulang (server juga akan melewatinya). Lanjutkan dari operasi berikutnya yang belum berhasil. Tahap yang masih running/pending wajib ditutup dengan alat milestone sebelum jawaban akhir. File yang sudah dibuat tetap ada; baca ulang dengan read_file sebelum mengedit.` : ""}\n\nTanggal saat ini (waktu Makassar, UTC+8): ${today}. Untuk permintaan info terbaru, cari dengan tahun berjalan dan cek tanggal sumber sebelum menjawab.`,
+            system: `${PRIME_PROMPT}\n\n[MODE VISUAL]\nTema giliran ini: ${turnMode === "webh" ? "WEBH (persona MODE WEBH aktif)" : "Prime"}. Tema sudah dipilih server; jangan membahasnya, langsung jawab.\n\n[TAMPILKAN KODE LANGSUNG]\nUntuk permintaan membuat kode/script/contoh program, tulis kode lengkap langsung di jawaban dalam blok kode markdown (supaya tampil saat diketik). Jangan memakai write_file/run_command untuk itu kecuali pengguna jelas meminta menyimpan file, menjalankan, menguji, atau mengedit proyek di sandbox.${resumed ? `\n\n[CHECKPOINT TUGAS ${taskId} - LANJUTKAN, JANGAN ULANG DARI AWAL]\nStatus terakhir: ${ckpt.state}. Operasi terakhir yang berhasil: ${ckpt.lastOp ?? "-"}.\nTahap: ${ckpt.milestones.map((m) => `${m.title}=${m.status}`).join(", ") || "-"}.\nFile yang sudah diubah: ${[...new Set(ckpt.files.map((f) => f.path))].join(", ") || "-"}.\nTes terakhir: ${ckpt.lastTest ? `${ckpt.lastTest.command} (exit ${ckpt.lastTest.exitCode})` : "-"}.\nError terakhir: ${ckpt.lastError ? ckpt.lastError.message.slice(0, 500) : "-"}.\nOperasi yang sudah berhasil tidak perlu diulang (server juga akan melewatinya). Lanjutkan dari operasi berikutnya yang belum berhasil. Tahap yang masih running/pending wajib ditutup dengan alat milestone sebelum jawaban akhir. File yang sudah dibuat tetap ada; baca ulang dengan read_file sebelum mengedit.` : ""}\n\nTanggal saat ini (waktu Makassar, UTC+8): ${today}. Untuk permintaan info terbaru, cari dengan tahun berjalan dan cek tanggal sumber sebelum menjawab.`,
           messages: modelMessages,
           tools,
           stopWhen: stepCountIs(50),
