@@ -113,24 +113,30 @@ async function isAlive(v1Base: string): Promise<boolean> {
 
 // Cache the resolved URL for a short time so each message doesn't wait on
 // registry + health checks before the model even starts.
-let cachedUrl: { url: string; at: number } | null = null;
+const cachedUrl: Record<string, { url: string; at: number }> = {};
 const CACHE_MS = 60_000;
+// Model "coder" (Qwen3-Coder di Kaggle pumpydark) lapor ke kunci terpisah.
+const CODER_KEYS = ["foundry:coder-url:1", "foundry:coder-url:2", "foundry:coder-url:3"];
 
-async function resolveAiBaseUrl(): Promise<string> {
-  if (cachedUrl && Date.now() - cachedUrl.at < CACHE_MS) return cachedUrl.url;
-  const url = await resolveAiBaseUrlUncached();
-  cachedUrl = { url, at: Date.now() };
+async function resolveAiBaseUrl(kind: "prime" | "coder" = "prime"): Promise<string> {
+  const hit = cachedUrl[kind];
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.url;
+  const url = await resolveAiBaseUrlUncached(kind);
+  cachedUrl[kind] = { url, at: Date.now() };
   return url;
 }
 
-async function resolveAiBaseUrlUncached(): Promise<string> {
-  const fallback = withV1(process.env["AI_BASE_URL"] || "https://api.openai.com/v1");
+async function resolveAiBaseUrlUncached(kind: "prime" | "coder"): Promise<string> {
+  const keys = kind === "coder" ? CODER_KEYS : REGISTRY_KEYS;
+  const fallback = withV1(
+    (kind === "coder" ? process.env["AI_CODER_BASE_URL"] : undefined) || process.env["AI_BASE_URL"] || "https://api.openai.com/v1",
+  );
   const regUrl = process.env["AI_REGISTRY_URL"];
   const regToken = process.env["AI_REGISTRY_TOKEN"];
   if (!regUrl || !regToken) return fallback;
 
   try {
-    const path = REGISTRY_KEYS.map(encodeURIComponent).join("/");
+    const path = keys.map(encodeURIComponent).join("/");
     const res = await fetch(`${regUrl.replace(/\/+$/, "")}/mget/${path}`, {
       headers: { Authorization: `Bearer ${regToken}` },
       signal: AbortSignal.timeout(3000),
@@ -369,6 +375,7 @@ export const Route = createFileRoute("/api/chat")({
           secrets?: { name: string; service: string; value: string }[];
           taskId?: string;
           mode?: "webh" | "prime";
+          aiModel?: "prime" | "coder";
         };
         try {
           body = (await request.json()) as typeof body;
@@ -410,10 +417,13 @@ export const Route = createFileRoute("/api/chat")({
             (out, s) => (s.value.length >= 6 ? out.split(s.value).join(`[SECRET:${s.name}]`) : out),
             text,
           );
-        const baseURL = await resolveAiBaseUrl();
+        const aiKind = body.aiModel === "coder" ? "coder" : "prime";
+        const baseURL = await resolveAiBaseUrl(aiKind);
         // openai-compatible membaca reasoning_content sehingga thinking benar-benar dialirkan.
         const provider = createOpenAICompatible({ name: "openai", apiKey, baseURL: baseURL ?? "https://api.openai.com/v1" });
-        const model = process.env["AI_MODEL"] || "gpt-4o-mini";
+        const model = aiKind === "coder"
+          ? process.env["AI_CODER_MODEL"] || "hf.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:UD-Q4_K_XL"
+          : process.env["AI_MODEL"] || "gpt-4o-mini";
         const today = new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Makassar", weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date());
 
         const encoder = new TextEncoder();
