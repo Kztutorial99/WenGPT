@@ -420,7 +420,9 @@ export const Route = createFileRoute("/api/chat")({
         const taskId = typeof body.taskId === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(body.taskId) ? body.taskId : `task-${Date.now().toString(36)}`;
         let seq = 0;
         const eventLog: string[] = [];
+        let lastRealAt = Date.now();
         const emit = (e: Ev) => {
+          if (e.t !== "hb") lastRealAt = Date.now();
           const line = JSON.stringify({ ...e, seq: ++seq, ts: Date.now() });
           if (e.t !== "hb" && e.t !== "text") eventLog.push(line);
           try {
@@ -1145,7 +1147,15 @@ export const Route = createFileRoute("/api/chat")({
               ckpt.state = "";
               setState(st === "COMPLETED" || st === "FAILED" || st === "ATTENTION" ? "EXECUTING" : st);
             }
-            const hb = setInterval(() => emit({ t: "hb" }), 4000);
+            // Server AI (Ollama) baru mengirim panggilan alat setelah seluruh isinya selesai ditulis,
+            // jadi linimasa diam lama. Beri tanda proses supaya pengguna tahu model sedang menyusun.
+            const hb = setInterval(() => {
+              const idle = Date.now() - lastRealAt;
+              if (idle > 5000 && commandRunning === 0) {
+                emit({ t: "status", state: "EXECUTING", label: "Mengerjakan", detail: `Menyusun kode/langkah berikutnya… ${Math.round(idle / 1000)} dtk` } as Ev);
+                lastRealAt = Date.now() - idle; // jaga hitungan diam tetap berjalan
+              } else emit({ t: "hb" });
+            }, 4000);
             try {
               for await (const part of result.fullStream) {
                 if (part.type === "text-delta") {
