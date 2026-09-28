@@ -200,6 +200,8 @@ function flushSave() {
       folders: state.folders,
       read: state.read,
     });
+  // Mode sesi: riwayat hanya di memori, tidak disimpan ke browser.
+  if (EPHEMERAL) { void data; return; }
   try {
     localStorage.setItem(STORE, data());
   } catch {
@@ -220,6 +222,7 @@ function flushSave() {
     }
   }
 }
+const EPHEMERAL = true;
 function updateSessions(updater: (sessions: ChatSession[]) => ChatSession[]) {
   state = { ...state, sessions: updater(state.sessions) };
   save();
@@ -245,8 +248,17 @@ export function bootChatStore() {
   let fileOps: Record<string, FileOp> = {};
   let folders: string[] = [];
   let read: ReadState = EMPTY_READ;
+  if (EPHEMERAL) {
+    try {
+      localStorage.removeItem(STORE);
+      localStorage.removeItem(LEGACY);
+      indexedDB.deleteDatabase("wengpt:attachments");
+    } catch {
+      /* abaikan */
+    }
+  }
   try {
-    const stored = JSON.parse(localStorage.getItem(STORE) || "null") as {
+    const stored = JSON.parse((EPHEMERAL ? null : localStorage.getItem(STORE)) || "null") as {
       sessions?: ChatSession[];
       activeId?: string;
       attachments?: SavedFile[];
