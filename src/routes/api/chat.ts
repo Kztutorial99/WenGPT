@@ -1106,6 +1106,7 @@ export const Route = createFileRoute("/api/chat")({
 
         const toolStartedAt = new Map<string, number>();
         const inputBuf = new Map<string, string>();
+                const liveBeat = new Map<string, number>();
         const inputName = new Map<string, string>();
         const announced = new Set<string>();
         let rawText = "";
@@ -1187,6 +1188,13 @@ export const Route = createFileRoute("/api/chat")({
                   inputBuf.set(part.id, buf);
                   const fp = buf.match(/"path"\s*:\s*"([^"]+)"/)?.[1]?.split("/").pop();
                   const verb = inputName.get(part.id) === "edit_file" ? "Mengubah" : "Menulis";
+                  if (inputName.get(part.id) === "write_file" && Date.now() - (liveBeat.get(part.id) ?? 0) > 200) {
+                    liveBeat.set(part.id, Date.now());
+                    const raw = buf.match(/"content"\s*:\s*"((?:[^"\\]|\\.)*)/)?.[1] ?? "";
+                    const content = raw.replace(/\\u([0-9a-fA-F]{4})/g, (_m, h) => String.fromCharCode(parseInt(h, 16))).replace(/\\(.)/g, (_m, c) => (c === "n" ? "\n" : c === "t" ? "\t" : c === "r" ? "" : c));
+                    const path = buf.match(/"path"\s*:\s*"([^"]+)"/)?.[1];
+                    if (path || content) emit({ t: "tool", id: part.id, name: "write_file", input: { path, content, live: true } } as never);
+                  }
                   if (fp && !announced.has(part.id)) {
                     announced.add(part.id);
                     lastInputBeat = Date.now();
