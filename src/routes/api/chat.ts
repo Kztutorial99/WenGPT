@@ -6,10 +6,11 @@ import { Sandbox } from "e2b";
 import { verifySecret } from "@/lib/secret-test.server";
 
 import AGENT_INSTRUCTIONS from "../../../AGENT.md?raw";
+import WEBH_INSTRUCTIONS from "../../../WEBH.md?raw";
 
 const stripComments = (s: string) => s.replace(/^<!--[\s\S]*?-->\s*/, "").trim();
-// AGENT.md sudah memuat persona Prime + MODE WEBH, jadi AI selalu tahu keduanya tanpa perlu diingatkan.
-const PRIME_PROMPT = stripComments(AGENT_INSTRUCTIONS);
+// AGENT.md + WEBH.md dimuat sebagai instruksi utama sejak awal, AI wajib mengikuti keduanya.
+const PRIME_PROMPT = `${stripComments(AGENT_INSTRUCTIONS)}\n\n${stripComments(WEBH_INSTRUCTIONS)}`;
 
 
 // Model kadang menulis pemanggilan tool sebagai teks biasa. Saring sebelum dikirim ke layar.
