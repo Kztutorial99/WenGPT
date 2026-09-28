@@ -298,7 +298,7 @@ function Chat() {
                   <Crown className="size-3.5 shrink-0 fill-primary text-primary" />
                 </span>
               </h1>
-              <p className="text-[10px] leading-tight text-muted-foreground">AI Tanpa Batas</p>
+              <ModelToggle />
             </div>
             <div className="flex min-w-0 shrink">
               <ConnectionStatus />
@@ -673,5 +673,31 @@ function WorkDuration({ start, end }: { start: number; end?: number | undefined 
     <span className="shrink-0 rounded-full border border-border/60 px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-muted-foreground" title="Durasi Linimasa">
       {text}
     </span>
+  );
+}
+
+function ModelToggle() {
+  const [model, setModel] = useState<"prime" | "coder">("prime");
+  useEffect(() => {
+    setModel(localStorage.getItem("wengpt:ai-model") === "coder" ? "coder" : "prime");
+  }, []);
+  const pick = (m: "prime" | "coder") => {
+    localStorage.setItem("wengpt:ai-model", m);
+    setModel(m);
+  };
+  return (
+    <div className="mt-0.5 flex w-fit rounded-full border border-brand-line p-0.5 text-[10px] leading-none" role="group" aria-label="Pilih model AI">
+      {(["prime", "coder"] as const).map((m) => (
+        <button
+          key={m}
+          type="button"
+          onClick={() => pick(m)}
+          aria-pressed={model === m}
+          className={`rounded-full px-2 py-0.5 transition-colors ${model === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-primary"}`}
+        >
+          {m === "prime" ? "Qwen 27B" : "Coder 30B"}
+        </button>
+      ))}
+    </div>
   );
 }
