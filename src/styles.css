@@ -82,13 +82,13 @@
   padding: 0;
   border-radius: 0;
   background: linear-gradient(150deg, var(--primary), color-mix(in oklab, var(--primary) 45%, transparent) 40%, color-mix(in oklab, var(--primary) 45%, transparent) 60%, var(--primary));
-  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
 }
 .cyber-chip::before {
   content: "";
   position: absolute;
   inset: 1.5px;
-  clip-path: polygon(4.5px 0, 100% 0, 100% calc(100% - 4.5px), calc(100% - 4.5px) 100%, 0 100%, 0 4.5px);
+  clip-path: polygon(0 0, calc(100% - 4.5px) 0, 100% 4.5px, 100% 100%, 4.5px 100%, 0 calc(100% - 4.5px));
   background: color-mix(in oklab, var(--card) 90%, transparent);
 }
 .cyber-chip > * { position: relative; z-index: 1; }
@@ -112,6 +112,7 @@
   74%, 100% { transform: rotate(360deg) scale(1); filter: drop-shadow(0 0 0 transparent); }
 }
 .brand-hero > svg { animation: wengpt-hero-spin 7s cubic-bezier(.5,.05,.35,1) infinite 1s; }
+.brand-chip > svg { animation: wengpt-hero-spin 7s cubic-bezier(.5,.05,.35,1) infinite 1s; }
 
 @media (prefers-reduced-motion: reduce) {
   .brand-mark, .brand-mark > svg, .brand-hero > svg { animation: none; }

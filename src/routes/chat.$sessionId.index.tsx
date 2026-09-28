@@ -412,7 +412,7 @@ function Chat() {
                 {message.role === "assistant" && (
                   <div className="flex items-center gap-2">
                     <span className="inline-flex items-center gap-2 rounded-full border border-brand-line bg-card/70 py-1 pl-1 pr-3 text-xs font-semibold">
-                      <span className="grid size-6 place-items-center rounded-full border border-brand-line text-primary">
+                      <span className="brand-chip grid size-6 place-items-center rounded-full border border-brand-line text-primary">
                         <WenGptMark className="size-3.5" />
                       </span>
                       WenGPT
