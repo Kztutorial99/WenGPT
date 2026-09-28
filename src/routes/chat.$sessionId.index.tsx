@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Fragment, useEffect, useState } from "react";
-import { Check, CheckCheck, ChevronRight, CircleUserRound, Code2, Copy, Crown, FileText, GitBranch, Globe, Image as ImageIcon, Maximize2, Menu, Minimize2, MoreVertical, Paperclip, Plus, RotateCcw, SendHorizontal, Sparkles, ThumbsDown, ThumbsUp, Video, X, Zap } from "lucide-react";
+import { Check, CheckCheck, ChevronRight, CircleUserRound, Code2, Copy, Crown, FileText, GitBranch, Globe, Image as ImageIcon, Maximize2, Menu, Minimize2, MoreVertical, Paperclip, Plus, RotateCcw, SendHorizontal, Sparkles, ThumbsDown, ThumbsUp, Video, X } from "lucide-react";
 import { WenGptMark } from "@/components/wen-gpt-mark";
 import { AppNav } from "@/components/app-nav";
 import { AiDots, requestedSecrets, SecretSlider } from "@/components/secret-cards";
@@ -68,7 +68,6 @@ export const Route = createFileRoute("/chat/$sessionId/")({
 });
 const STARTERS = [
   { icon: Sparkles, text: "Kamu bisa bantu apa saja?" },
-  { icon: Zap, text: "Install pandas lalu hitung rata-rata 10 angka acak" },
   { icon: Code2, text: "Cek versi Python dan Node di sandbox" },
   { icon: FileText, text: "Buatkan script Python sederhana" },
 ];
@@ -290,17 +289,19 @@ function Chat() {
             <span className="brand-mark size-9 shrink-0 rounded-full">
               <WenGptMark className="size-4" />
             </span>
-            <div className="min-w-0 flex-1">
-              <h1 className="flex items-center gap-1.5 truncate text-sm font-semibold sm:text-base">
+            <div className="min-w-fit flex-1">
+              <h1 className="flex min-w-0 items-center gap-1.5 whitespace-nowrap text-sm font-semibold sm:text-base">
                 WenGPT
-                <span className="flex items-center gap-1 text-primary">
+                <span className="flex shrink-0 items-center gap-1 pr-0.5 leading-none text-primary">
                   {session?.mode === "webh" ? "WEBH" : "Prime"}
-                  <Crown className="size-3.5 fill-primary text-primary" />
+                  <Crown className="size-3.5 shrink-0 fill-primary text-primary" />
                 </span>
               </h1>
               <p className="text-[10px] leading-tight text-muted-foreground">AI Tanpa Batas</p>
             </div>
-            <ConnectionStatus />
+            <div className="flex min-w-0 shrink">
+              <ConnectionStatus />
+            </div>
             <Button asChild variant="ghost" size="icon" title="Pengaturan" aria-label="Pengaturan" className="hidden size-9 shrink-0 rounded-full border border-brand-line text-primary sm:grid">
               <Link to="/settings">
                 <CircleUserRound className="size-4" />
@@ -330,8 +331,8 @@ function Chat() {
         <ConversationContent className="mx-auto min-h-full w-full min-w-0 max-w-3xl gap-7 px-3 py-6 sm:px-6 sm:py-8">
           {!session?.messages.length ? (
             <section className="flex min-h-[62dvh] flex-col items-center justify-center text-center">
-              <span className="brand-mark mb-6 size-16 rounded-2xl shadow-[0_0_55px_-10px_var(--mark-glow)]">
-                <WenGptMark className="size-7" />
+              <span className="brand-mark brand-hero mb-6 size-16 rounded-2xl shadow-[0_0_55px_-10px_var(--mark-glow)]">
+                <WenGptMark className="size-8" />
               </span>
               <h2 className="text-balance text-3xl font-bold sm:text-4xl">
                 WenGPT{" "}
@@ -410,19 +411,19 @@ function Chat() {
               <Message key={message.id} from={message.role} className="min-w-0 max-w-full">
                 {message.role === "assistant" && (
                   <div className="flex items-center gap-2">
-                    <span className="brand-mark size-8 rounded-full">
-                      <WenGptMark className="size-4" />
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-brand-line bg-card/70 px-2.5 py-1 text-[11px] font-semibold">
-                      <Crown className="size-3 fill-primary text-primary" />
-                      WenGPT {session?.mode === "webh" ? "WEBH" : "Prime"}
-                      <ChevronRight className="size-3 text-muted-foreground" />
+                    <span className="inline-flex items-center gap-2 rounded-full border border-brand-line bg-card/70 py-1 pl-1 pr-3 text-xs font-semibold">
+                      <span className="grid size-6 place-items-center rounded-full border border-brand-line text-primary">
+                        <WenGptMark className="size-3.5" />
+                      </span>
+                      WenGPT
+                      <Crown className="size-3.5 fill-primary text-primary" />
                     </span>
                     {active && message.agent?.label === "Berpikir" && !work && (
                       <span className="ml-1 rounded-full border border-border/70 px-2 py-0.5 text-[10px] font-normal text-muted-foreground">Berpikir</span>
                     )}
                   </div>
                 )}
+                {(message.role === "user" || hasResponse || work) && (
                 <MessageContent
                   className={
                     message.role === "user"
@@ -541,6 +542,7 @@ function Chat() {
                     </div>
                   )}
                 </MessageContent>
+                )}
               </Message>
             )})
           )}
@@ -601,8 +603,8 @@ function Chat() {
             className="[&_[data-slot=input-group]]:overflow-hidden [&_[data-slot=input-group]]:border-0 [&_[data-slot=input-group]]:bg-transparent [&_[data-slot=input-group]]:shadow-none"
           >
             <AttachmentHeader />
-            <div className="flex items-end gap-2 px-2.5 pt-2">
-              <span className="brand-mark mb-1 size-9 shrink-0 rounded-full">
+            <div className="relative w-full px-2.5 pt-2">
+              <span aria-hidden="true" className="pointer-events-none absolute left-3.5 top-3.5 z-10 grid size-8 select-none place-items-center rounded-full border border-brand-line bg-card text-primary">
                 <WenGptMark className="size-4" />
               </span>
               <PromptInputTextarea
@@ -610,7 +612,7 @@ function Chat() {
                 onChange={(event) => setInput(event.currentTarget.value)}
                 placeholder={`Tulis pesan untuk WenGPT ${session?.mode === "webh" ? "WEBH" : "Prime"}...`}
                 className={cn(
-                  "max-h-56 min-w-0 flex-1 px-2 pt-2 pb-1 text-base leading-6 sm:text-sm",
+                  "max-h-56 w-full min-w-0 pl-12 pr-2 pt-3.5 pb-1 text-left text-base leading-6 sm:text-sm",
                   expanded ? "min-h-40" : "min-h-12",
                 )}
               />

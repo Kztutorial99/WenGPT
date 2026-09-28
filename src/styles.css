@@ -11,7 +11,7 @@
   --color-accent: var(--accent); --color-accent-foreground: var(--accent-foreground); --color-destructive: var(--destructive); --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border); --color-input: var(--input); --color-ring: var(--ring); --color-success: var(--success); --color-warning: var(--warning);
   --font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif; --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
-  --shadow-panel: 0 18px 48px -30px oklch(0 0 0 / .95); --shadow-user: 0 12px 28px -18px oklch(.56 .21 25 / .65);
+  --shadow-panel: 0 18px 48px -30px oklch(0 0 0 / .95); --shadow-user: 0 12px 28px -18px var(--mark-glow);
   --color-grid: var(--grid); --color-brand-line: var(--brand-line);
 }
 :root, .dark {
@@ -36,7 +36,7 @@
   html { font-family: var(--font-sans); }
   html, body { width: 100%; max-width: 100%; height: 100%; overscroll-behavior: none; }
   body { min-width: 0; overflow: hidden; color: var(--color-foreground); background: var(--color-background); }
-  ::selection { background: oklch(.61 .215 25 / .3); }
+  ::selection { background: color-mix(in oklab, var(--primary) 30%, transparent); }
   button, a, [role="button"] { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   button, a { transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease, transform 100ms ease; }
   button:active, a:active { transform: scale(.975); }
@@ -50,14 +50,14 @@
 @utility cyber-frame {
   --cut: 14px;
   position: relative;
-  padding: 1.5px;
-  background: linear-gradient(150deg, var(--brand-line), color-mix(in oklab, var(--brand-line) 20%, transparent) 38%, color-mix(in oklab, var(--brand-line) 20%, transparent) 62%, var(--brand-line));
+  padding: 2px;
+  background: linear-gradient(150deg, var(--primary), color-mix(in oklab, var(--primary) 55%, transparent) 38%, color-mix(in oklab, var(--primary) 55%, transparent) 62%, var(--primary));
   clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
   filter: drop-shadow(0 0 14px color-mix(in oklab, var(--primary) 16%, transparent));
 }
 @utility cyber-frame-inner {
   background: color-mix(in oklab, var(--card) 94%, transparent);
-  clip-path: polygon(calc(var(--cut) - 1.5px) 0, 100% 0, 100% calc(100% - var(--cut) + 1.5px), calc(100% - var(--cut) + 1.5px) 100%, 0 100%, 0 calc(var(--cut) - 1.5px));
+  clip-path: polygon(calc(var(--cut) - 1px) 0, 100% 0, 100% calc(100% - var(--cut) + 1px), calc(100% - var(--cut) + 1px) 100%, 0 100%, 0 calc(var(--cut) - 1px));
 }
 /* Kartu pesan AI: sudut lancip ringan dengan garis neon. */
 @utility cyber-card {
@@ -87,9 +87,15 @@
 }
 .brand-mark { animation: wengpt-mark-reveal 0.7s cubic-bezier(0.2, 0.8, 0.2, 1.1) both; }
 .brand-mark > svg { animation: wengpt-symbol-cycle 10s ease-in-out infinite 1s; }
+@keyframes wengpt-hero-spin {
+  0%, 55% { transform: rotate(0) scale(1); filter: drop-shadow(0 0 0 transparent); }
+  70% { transform: rotate(200deg) scale(1.12); filter: drop-shadow(0 0 8px var(--mark-glow)); }
+  85%, 100% { transform: rotate(360deg) scale(1); filter: drop-shadow(0 0 0 transparent); }
+}
+.brand-hero > svg { animation: wengpt-hero-spin 7s cubic-bezier(.45,.05,.25,1) infinite 1s; }
 
 @media (prefers-reduced-motion: reduce) {
-  .brand-mark, .brand-mark > svg { animation: none; }
+  .brand-mark, .brand-mark > svg, .brand-hero > svg { animation: none; }
 }
 @utility cyber-grid {
   background-image: linear-gradient(to right, var(--grid) 1px, transparent 1px), linear-gradient(to bottom, var(--grid) 1px, transparent 1px), linear-gradient(to bottom, var(--grid-wash), transparent 65%);

@@ -71,13 +71,13 @@ export function ConnectionStatus({ reconnecting = false }: { reconnecting?: bool
       role="status"
       aria-live="polite"
       title={shown === "online" ? "Tersambung ke server WenGPT" : shown === "offline" ? "Internet terputus" : "Menyambungkan ke server WenGPT"}
-      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border bg-background/60 px-2 py-0.5 text-[10px] font-medium transition-colors ${ring}`}
+      className={`inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full border bg-background/60 px-2 py-0.5 text-[10px] font-medium transition-colors ${ring}`}
     >
-      <span className="relative grid size-2 place-items-center">
+      <span className="relative grid size-2 shrink-0 place-items-center">
         {shown === "online" && <span className="absolute inset-0 animate-ping rounded-full bg-success/50 [animation-duration:2.5s]" />}
         <span className={`relative size-2 rounded-full ${dot}`} />
       </span>
-      {TEXT[shown]}
+      <span className="min-w-0 truncate">{TEXT[shown]}</span>
     </span>
   );
 }
