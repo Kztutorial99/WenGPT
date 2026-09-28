@@ -106,7 +106,7 @@ function Timeline() {
     .at(-1);
   const agentDone = !!agent && (!!agent.done || ["COMPLETED", "FAILED", "ATTENTION"].includes(agent.state));
   const assistant = current?.messageIds.map((id) => session?.messages.find((m) => m.id === id)).filter(Boolean).at(-1);
-  const lastToolIndex = assistant?.parts.findLastIndex((part) => part.type === "tool") ?? -1;
+  const lastToolIndex = assistant?.parts.reduce((last, part, index) => part.type === "tool" ? index : last, -1) ?? -1;
   const answering = lastToolIndex >= 0 && !!assistant?.parts.slice(lastToolIndex + 1).some((part) => part.type === "text" && part.text.trim());
   const isActive = !!active && !agentDone && !answering;
   const failed = !!agent && agentDone && agent.done ? !agent.done.ok : false;
