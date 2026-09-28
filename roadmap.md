@@ -53,4 +53,4 @@
 - [x] Hapus animasi Implementasi ganda; titik-titik hanya saat menunggu
 - [x] Coba lagi tidak macet: pengawas koneksi 25 dtk, animasi berhenti saat terputus/dihentikan
 - [x] Indikator koneksi Offline/Menyambungkan/Tersambung di navigasi atas
-- [ ] Ubah mode WEBH menjadi pilihan AI, wariskan tema ke semua halaman, perbaiki animasi ikon/latar, uji, push, dan cek deploy
+- [x] Ubah mode WEBH menjadi pilihan AI, wariskan tema ke semua halaman, perbaiki animasi ikon/latar, uji, push, dan cek deploy
