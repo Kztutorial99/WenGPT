@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { CopyButton } from "@/components/chat-code";
 import { Button } from "@/components/ui/button";
-import { loadCheckpoints, markTimelineRead, type Checkpoint, type TimelineEntry, type ToolRun } from "@/lib/chat-store";
+import { isWorkCheckpoint, loadCheckpoints, markTimelineRead, type Checkpoint, type TimelineEntry, type ToolRun } from "@/lib/chat-store";
 import { useChatStore } from "@/lib/use-chat-store";
 import { AgentProgress } from "@/components/agent-progress";
 export const Route = createFileRoute("/chat/$sessionId/timeline")({
@@ -71,7 +71,14 @@ function Timeline() {
   const { sessionId } = Route.useParams();
   const snapshot = useChatStore();
   const [index, setIndex] = useState<number | null>(null);
-  const checkpoints = loadCheckpoints(sessionId);
+  const session = snapshot.sessions.find((s) => s.id === sessionId);
+  const checkpoints = loadCheckpoints(sessionId).filter((checkpoint) => {
+    const checkpointAgent = checkpoint.messageIds
+      .map((id) => session?.messages.find((m) => m.id === id)?.agent)
+      .filter(Boolean)
+      .at(-1);
+    return isWorkCheckpoint(checkpoint, checkpointAgent);
+  });
   const streaming = snapshot.streamingIds.includes(sessionId);
   useEffect(() => {
     markTimelineRead(sessionId);
@@ -94,7 +101,6 @@ function Timeline() {
   const done = useMemo(() => runs.filter((run) => run.output).length, [runs]);
   const active = streaming && current?.id === checkpoints.at(-1)?.id;
   const cancelled = current?.messageIds.some((id) => snapshot.sessions.find((s) => s.id === sessionId)?.messages.find((m) => m.id === id)?.parts.some((p) => p.type === "cancelled"));
-  const session = snapshot.sessions.find((s) => s.id === sessionId);
   const agent = current?.messageIds
     .map((id) => session?.messages.find((m) => m.id === id)?.agent)
     .filter(Boolean)
@@ -118,7 +124,7 @@ function Timeline() {
           </div>
           <p className="truncate text-[11px] text-muted-foreground">
             {current
-              ? `Proses ${(index ?? 0) + 1} dari ${checkpoints.length} · ${done}/${runs.length} langkah · ${isActive ? "sedang dikerjakan" : failed ? "perlu perhatian" : "selesai"}`
+              ? `${agent?.label ?? (isActive ? "Mengerjakan project" : failed ? "Perlu perhatian" : "Selesai")} · ${done}/${runs.length} aktivitas`
               : "Belum ada proses"}
           </p>
         </div>
@@ -131,7 +137,7 @@ function Timeline() {
       <section className="mx-auto w-full max-w-3xl px-4 pt-5 pb-[max(2rem,env(safe-area-inset-bottom))] sm:px-6">
         {!current ? (
           <p className="py-20 text-center text-sm text-muted-foreground">
-             Belum ada proses berpikir atau langkah untuk sesi ini.
+             Belum ada tugas kerja dalam sesi ini.
           </p>
         ) : (
           <>

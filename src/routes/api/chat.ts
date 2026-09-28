@@ -725,6 +725,12 @@ export const Route = createFileRoute("/api/chat")({
           emit({ t: "file", path, op, ranges: d.ranges, diff: d.diff, added: d.added, removed: d.removed, opId });
           return d;
         };
+        const commandDetail = (command: string, kind: "setup" | "implement" | "test") => {
+          const file = command.match(/(?:^|\s)(?:\/home\/user\/)?([\w./-]+\.[A-Za-z0-9]+)(?:\s|$)/)?.[1]?.split("/").pop();
+          if (kind === "test") return file ? `Menguji ${file}` : "Menjalankan pengujian";
+          if (kind === "setup") return "Menyiapkan kebutuhan project";
+          return file ? `Mengubah ${file}` : "Memperbarui project";
+        };
         const tools = {
           set_intent: tool({
             description:
@@ -804,9 +810,16 @@ export const Route = createFileRoute("/api/chat")({
               if (isInstall && doneOp(opId))
                 return { exitCode: 0, skipped: true, stdout: "(dilewati: install yang sama sudah berhasil sebelumnya di tugas ini)", stderr: "" };
               const isTest = /\b(g\+\+|gcc|clang|make|cmake|javac|rustc|cargo|go (build|run|test)|tsc|vite build|npm (run )?(build|test)|pytest|python3? .*test|curl)\b/.test(command);
+              const changesProject = /(?:^|[;&|]\s*|\s)(?:cat\s+[^|;]*>|tee\s|touch\s|mkdir\s|cp\s|mv\s|sed\s+-i|rm\s)|\b(?:npm|pnpm|yarn|bun)\s+(?:i|install|add)\b|\bpip3?\s+install\b/.test(command);
               if (isTest) {
-                setState("TESTING", command.slice(0, 120));
+                setState("TESTING", commandDetail(command, "test"));
                 if (!ckpt.milestones.find((m) => m.id === "fix" && m.status === "running")) setMs("test", "running");
+              } else if (isInstall) {
+                setState("EXECUTING", commandDetail(command, "setup"));
+                setMs("setup", "running");
+              } else if (changesProject) {
+                setState("EXECUTING", commandDetail(command, "implement"));
+                setMs("implement", "running");
               }
               commandRunning++;
               const finish = async (exitCode: number, stdout: string, stderr: string) => {

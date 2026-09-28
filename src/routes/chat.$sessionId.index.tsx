@@ -27,6 +27,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
   createSession,
   loadCheckpoints,
+  isWorkCheckpoint,
   resumeSession,
   sendMessage,
   setActiveSession,
@@ -273,24 +274,16 @@ function Chat() {
                 : undefined;
               const active = streaming && message.id === last?.id;
               const runs = checkpoint?.runs ?? [];
+              const hasResponse = message.parts.some((part) => part.type === "text" && part.text.trim().length > 0);
+              const work = message.role === "assistant" && isWorkCheckpoint(checkpoint, message.agent);
               const complete = runs.filter((run) => !!run.output).length;
-              const currentRun = runs.find((run) => !run.output);
               const lastToolIndex = message.parts.reduce((lastIndex, part, index) => part.type === "tool" ? index : lastIndex, -1);
               const sources = message.parts
                 .flatMap((part) => (part.type === "tool" && part.run.name === "web_search" ? (part.run.output?.results ?? []) : []))
                 .filter((r, i, all) => all.findIndex((x) => x.url === r.url) === i)
                 .slice(0, 6);
-              const progress = currentRun?.name === "web_search"
-                ? "Mencari di web"
-                : currentRun?.name === "read_webpage"
-                  ? "Membaca halaman web"
-                  : currentRun?.name === "download_file"
-                    ? "Mengunduh file"
-                  : currentRun?.name === "run_command"
-                ? "Menjalankan perintah"
-                : currentRun?.name === "write_file"
-                  ? "Menulis file"
-                  : currentRun ? "Sedang memproses" : active ? "Sedang berpikir" : "Proses selesai";
+              const progress = message.agent?.label ??
+                (message.agent?.state === "TESTING" ? "Menguji aplikasi" : "Mengerjakan project");
               return (
               <Message key={message.id} from={message.role} className="min-w-0 max-w-full">
                 {message.role === "assistant" && (
@@ -308,7 +301,7 @@ function Chat() {
                       : "w-full overflow-visible"
                   }
                 >
-                  {checkpoint && (
+                  {checkpoint && work && (
                     <Button asChild variant="outline" className="mb-2 h-auto w-full justify-start gap-2 rounded-md border-border/70 bg-card/55 px-3 py-2 text-left text-xs font-normal hover:border-primary/45">
                       <Link to="/chat/$sessionId/timeline" params={{ sessionId }} hash={checkpoint.id}>
                         <GitBranch className={`size-4 shrink-0 text-primary ${active ? "animate-pulse" : ""}`} />
@@ -318,7 +311,7 @@ function Chat() {
                       </Link>
                     </Button>
                   )}
-                  {message.role === "assistant" && message.agent && (
+                  {message.role === "assistant" && message.agent && work && (
                     <AgentProgress
                       agent={message.agent}
                       sessionId={sessionId}
@@ -330,7 +323,7 @@ function Chat() {
                     part.type === "text" ? (
                       <MessageResponse
                         key={`${message.id}-${index}`}
-                         isAnimating={active}
+                         isAnimating={active && !hasResponse}
                         className="wengpt-markdown min-w-0 max-w-full"
                       >
                         {part.text.replace(/\(Perintah\s*—\s*exit \?\s*\)\s*/g, "")}
@@ -403,7 +396,12 @@ function Chat() {
               </Message>
             )})
           )}
-          {streaming && (
+          {streaming && lastAssistant &&
+            !lastAssistant.parts.some((part) => part.type === "text" && part.text.trim().length > 0) &&
+            !isWorkCheckpoint(
+              checkpoints.find((item) => item.messageIds.includes(lastAssistant.id)),
+              lastAssistant.agent,
+            ) && (
             <div className="flex items-center gap-2.5 text-sm" role="status">
               <AiDots />
             </div>

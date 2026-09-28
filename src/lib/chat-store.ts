@@ -848,6 +848,30 @@ export function loadCheckpoints(sessionId: string): Checkpoint[] {
   }
   return list.filter((checkpoint) => checkpoint.entries.length);
 }
+
+const WORK_TOOL_NAMES = new Set([
+  "set_intent",
+  "milestone",
+  "todo",
+  "list_files",
+  "read_file",
+  "search_code",
+  "write_file",
+  "edit_file",
+  "run_command",
+  "preview_app",
+  "download_file",
+]);
+
+/** Bedakan tugas yang punya proses kerja dari chat biasa atau pencarian informasi singkat. */
+export function isWorkCheckpoint(checkpoint: Checkpoint | undefined, agent?: AgentState) {
+  if (!checkpoint) return false;
+  return (
+    (agent?.milestones.length ?? 0) > 0 ||
+    (agent?.files.length ?? 0) > 0 ||
+    checkpoint.runs.some((run) => WORK_TOOL_NAMES.has(run.name))
+  );
+}
 export function normalizePath(path: string) {
   return path.startsWith("/") ? path : `/home/user/${path}`;
 }

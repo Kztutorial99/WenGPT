@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { FolderOpen, GitBranch, MessagesSquare, Settings, SquareTerminal } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { loadAllFiles, loadCheckpoints } from "@/lib/chat-store";
+import { isWorkCheckpoint, loadAllFiles, loadCheckpoints } from "@/lib/chat-store";
 import { useChatStore } from "@/lib/use-chat-store";
 
 function Status({ value, dot }: { value: number; dot?: boolean }) {
@@ -47,11 +47,15 @@ export function AppNav({ sessionId }: { sessionId: string }) {
     snapshot.ready && loadAllFiles().some((file) => file.updatedAt > snapshot.read.files) ? 1 : 0;
   const steps =
     snapshot.ready &&
-    loadCheckpoints(sessionId).some((checkpoint) =>
-      checkpoint.runs.some(
+    loadCheckpoints(sessionId).some((checkpoint) => {
+      const agent = checkpoint.messageIds
+        .map((id) => snapshot.sessions.find((session) => session.id === sessionId)?.messages.find((message) => message.id === id)?.agent)
+        .filter(Boolean)
+        .at(-1);
+      return isWorkCheckpoint(checkpoint, agent) && checkpoint.runs.some(
         (run) => (run.finishedAt ?? run.startedAt) > (snapshot.read.timelines[sessionId] ?? 0),
-      ),
-    )
+      );
+    })
       ? 1
       : 0;
   const sessions = snapshot.sessions.filter(

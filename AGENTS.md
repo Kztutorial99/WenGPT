@@ -15,5 +15,6 @@
 - Active chat streams live in the module-level chat store so internal route navigation does not cancel the in-flight request.
 - Uploaded attachment blobs live in IndexedDB while browser-local chat metadata keeps only safe previews and references, because 20 MB files exceed localStorage capacity.
 - Keep AI reasoning and execution details in per-turn timeline entries, with one compact chat link and completed answer text only, so the conversation remains readable during long runs.
+- Classify timeline visibility from actual coding/work tools, milestones, or file changes; ordinary chat and simple web lookups must not create a visible work timeline.
 - Supply the current Makassar date and use Firecrawl as the sole web-search source; preserve Firecrawl ranking, retry brief rate limits once, and surface provider failures instead of reporting false empty results.
 - Ship to GitHub with the Git data API (blobs → tree → commit → ref on Kztutorial99/WenGPT main), never plain `git push`, because the sandbox blocks stateful git; then confirm the Vercel project build reaches READY.

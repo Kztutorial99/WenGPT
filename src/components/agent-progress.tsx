@@ -45,6 +45,21 @@ const range = (f: AgentFileChange) => {
   return r[1] > r[0] ? `L${r[0]}–${r[1]}` : `L${r[0]}`;
 };
 
+const friendlyDetail = (detail: string) => {
+  const trimmed = detail.trim();
+  if (!trimmed) return "";
+  const file = trimmed.match(/(?:^|\s)(?:\/home\/user\/)?([\w./-]+\.[A-Za-z0-9]+)(?:\s|$)/)?.[1];
+  if (/\b(g\+\+|gcc|clang|make|cmake|javac|rustc|cargo|go\s+(?:build|test)|npm\s+(?:run\s+)?(?:build|test)|pytest|tsc)\b/i.test(trimmed))
+    return file ? `Menguji ${file.split("/").pop()}` : "Menjalankan pengujian";
+  if (/\b(mkdir|install|npm\s+(?:i|install|add)|bun\s+(?:i|install|add)|pip\s+install)\b/i.test(trimmed))
+    return file ? `Menyiapkan ${file.split("/").pop()}` : "Menyiapkan project";
+  if (/\b(cat\s+>|tee|touch|sed\s+-i|cp\s|mv\s)\b/i.test(trimmed))
+    return file ? `Mengubah ${file.split("/").pop()}` : "Memperbarui file project";
+  if (trimmed.startsWith("/home/user/")) return `Mengerjakan ${trimmed.split("/").pop()}`;
+  if (/\s|&&|\|/.test(trimmed)) return "Menjalankan langkah kerja";
+  return trimmed;
+};
+
 /** Link ke File Manager: buka file & sorot baris. */
 export function fileLinkHash(path: string, line?: number) {
   return `${path}${line ? `:${line}` : ""}`;
@@ -133,7 +148,7 @@ export function AgentProgress({
         {stalled && <span className="text-muted-foreground">· masih bekerja…</span>}
       </div>
       {live && agent.detail && (
-        <p className="mt-0.5 truncate pl-5 text-muted-foreground">Sedang: {agent.detail}</p>
+        <p className="mt-0.5 truncate pl-5 text-muted-foreground">{friendlyDetail(agent.detail)}</p>
       )}
 
       {agent.milestones.length > 0 && (
