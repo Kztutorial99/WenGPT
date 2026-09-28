@@ -6,9 +6,9 @@ import { Sandbox } from "e2b";
 import { verifySecret } from "@/lib/secret-test.server";
 
 import AGENT_INSTRUCTIONS from "../../../AGENT.md?raw";
+import AGENT_INSTRUCTIONS from "../../../WEBH.md?raw";
 
 const SYSTEM_PROMPT = AGENT_INSTRUCTIONS.replace(/^<!--[\s\S]*?-->\s*/, "").trim();
-
 
 // Model kadang menulis pemanggilan tool sebagai teks biasa. Saring sebelum dikirim ke layar.
 const TOOL_NAMES = "set_intent|milestone|web_search|read_webpage|run_command|download_file|write_file|read_file|edit_file|list_files|search_code|todo|preview_app|request_secret|list_secrets|test_secret";
