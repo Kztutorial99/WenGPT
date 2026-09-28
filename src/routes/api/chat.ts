@@ -597,18 +597,6 @@ export const Route = createFileRoute("/api/chat")({
           return file ? `Mengubah ${file}` : "Memperbarui project";
         };
         const tools = {
-          set_theme: tool({
-            description:
-              "WAJIB dipanggil sekali sebagai alat pertama pada setiap giliran. Pilih tema berdasarkan pemahaman topik, bukan pencocokan kata. Gunakan webh untuk web security, reverse engineering web/aplikasi, malware analysis defensif, pentest, audit keamanan, vulnerability research, exploit analysis, forensik, atau permintaan langsung tema hacker/WEBH. Gunakan prime untuk topik lain, termasuk ketika pembahasan keamanan selesai atau pengguna meminta tema default/Prime.",
-            inputSchema: z.object({
-              mode: z.enum(["webh", "prime"]),
-              reason: z.string().max(160).describe("Alasan topik singkat; tidak ditampilkan di chat"),
-            }),
-            execute: async ({ mode }) => {
-              emit({ t: "mode", mode });
-              return { ok: true, mode };
-            },
-          }),
           set_intent: tool({
             description:
               "WAJIB untuk tugas coding sebelum alat pengubah proyek. status 'clear' = boleh dikerjakan; 'need_clarification' = tanya 1-3 hal penting dulu (alat pengubah proyek akan ditolak di giliran ini).",
@@ -1096,9 +1084,15 @@ export const Route = createFileRoute("/api/chat")({
           if (!needsThink) last.content.push({ type: "text", text: "/no_think" });
         }
 
+        // Tema dipilih di server (tanpa panggilan model tambahan) supaya jawaban langsung mulai.
+        const turnMode: "webh" | "prime" = /\b(prime|default)\b.*\b(tema|mode)\b|\b(tema|mode)\b.*\b(prime|default)\b/i.test(lastText)
+          ? "prime"
+          : /\b(webh|hacker|pentest|exploit|xss|sqli|sql injection|csrf|ssrf|rce|reverse engineer\w*|malware|forensi\w*|vulnerab\w*|kerentanan|keamanan web|web security|bug bounty|ctf|payload|decompil\w*|frida|burp)\b/i.test(lastText)
+            ? "webh"
+            : body.mode === "webh" && lastText.length < 60 ? "webh" : "prime";
         const result = streamText({
           model: provider.chatModel(model),
-            system: `${PRIME_PROMPT}\n\n[PEMILIHAN MODE VISUAL]\nTema sesi saat ini: ${body.mode === "webh" ? "WEBH" : "Prime"}. Pada setiap giliran, pahami topik secara semantik lalu panggil set_theme sebagai alat pertama sebelum jawaban atau alat lain. Jangan memilih berdasarkan kecocokan kata semata. WEBH berlaku selama topik keamanan atau reverse engineering terkait masih berlanjut; kembali ke Prime saat percakapan beralih atau pembahasan itu selesai. Permintaan tema eksplisit pengguna selalu diutamakan. Persona MODE WEBH di instruksi utama selalu kamu ketahui dan aktif selama set_theme memilih webh.${resumed ? `\n\n[CHECKPOINT TUGAS ${taskId} - LANJUTKAN, JANGAN ULANG DARI AWAL]\nStatus terakhir: ${ckpt.state}. Operasi terakhir yang berhasil: ${ckpt.lastOp ?? "-"}.\nTahap: ${ckpt.milestones.map((m) => `${m.title}=${m.status}`).join(", ") || "-"}.\nFile yang sudah diubah: ${[...new Set(ckpt.files.map((f) => f.path))].join(", ") || "-"}.\nTes terakhir: ${ckpt.lastTest ? `${ckpt.lastTest.command} (exit ${ckpt.lastTest.exitCode})` : "-"}.\nError terakhir: ${ckpt.lastError ? ckpt.lastError.message.slice(0, 500) : "-"}.\nOperasi yang sudah berhasil tidak perlu diulang (server juga akan melewatinya). Lanjutkan dari operasi berikutnya yang belum berhasil. Tahap yang masih running/pending wajib ditutup dengan alat milestone sebelum jawaban akhir. File yang sudah dibuat tetap ada; baca ulang dengan read_file sebelum mengedit.` : ""}\n\nTanggal saat ini (waktu Makassar, UTC+8): ${today}. Untuk permintaan info terbaru, cari dengan tahun berjalan dan cek tanggal sumber sebelum menjawab.`,
+            system: `${PRIME_PROMPT}\n\n[MODE VISUAL]\nTema giliran ini: ${turnMode === "webh" ? "WEBH (persona MODE WEBH aktif)" : "Prime"}. Tema sudah dipilih server; jangan membahasnya, langsung jawab.${resumed ? `\n\n[CHECKPOINT TUGAS ${taskId} - LANJUTKAN, JANGAN ULANG DARI AWAL]\nStatus terakhir: ${ckpt.state}. Operasi terakhir yang berhasil: ${ckpt.lastOp ?? "-"}.\nTahap: ${ckpt.milestones.map((m) => `${m.title}=${m.status}`).join(", ") || "-"}.\nFile yang sudah diubah: ${[...new Set(ckpt.files.map((f) => f.path))].join(", ") || "-"}.\nTes terakhir: ${ckpt.lastTest ? `${ckpt.lastTest.command} (exit ${ckpt.lastTest.exitCode})` : "-"}.\nError terakhir: ${ckpt.lastError ? ckpt.lastError.message.slice(0, 500) : "-"}.\nOperasi yang sudah berhasil tidak perlu diulang (server juga akan melewatinya). Lanjutkan dari operasi berikutnya yang belum berhasil. Tahap yang masih running/pending wajib ditutup dengan alat milestone sebelum jawaban akhir. File yang sudah dibuat tetap ada; baca ulang dengan read_file sebelum mengedit.` : ""}\n\nTanggal saat ini (waktu Makassar, UTC+8): ${today}. Untuk permintaan info terbaru, cari dengan tahun berjalan dan cek tanggal sumber sebelum menjawab.`,
           messages: modelMessages,
           tools,
           stopWhen: stepCountIs(50),
@@ -1144,6 +1138,7 @@ export const Route = createFileRoute("/api/chat")({
           async start(controller) {
             controllerRef = controller;
             emit({ t: "task", taskId, resumed });
+            emit({ t: "mode", mode: turnMode });
             if (!resumed) emit({ t: "status", state: "RECEIVED", label: "Menerima permintaan" });
             {
               const st = resumed ? ckpt.state : "UNDERSTANDING";
