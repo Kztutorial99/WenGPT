@@ -414,10 +414,14 @@ function Chat() {
             !(() => {
               // Titik-titik tampil selama AI bekerja; hilang hanya saat teks jawaban sedang mengalir.
               const tail = lastAssistant.parts[lastAssistant.parts.length - 1];
-              return tail?.type === "text" && tail.text.trim().length > 0;
+              const writing = /^(Menyiapkan file|Menulis|Mengubah)/.test(lastAssistant.agent?.detail ?? "") && !lastAssistant.parts.some((p) => p.type === "tool");
+              return tail?.type === "text" && tail.text.trim().length > 0 && !writing;
             })() && (
             <div className="flex items-center gap-2.5 text-sm" role="status">
               <AiDots />
+              {/^(Menyiapkan file|Menulis|Mengubah)/.test(lastAssistant.agent?.detail ?? "") && !lastAssistant.parts.some((p) => p.type === "tool") && (
+                <span className="text-xs text-muted-foreground">{lastAssistant.agent?.detail}…</span>
+              )}
             </div>
           )}
         </ConversationContent>
