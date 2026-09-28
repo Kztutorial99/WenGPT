@@ -18,7 +18,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Sync secrets ke Worker
         run: |
-          for k in AI_API_KEY AI_BASE_URL AI_MODEL AI_REGISTRY_TOKEN AI_REGISTRY_URL FIRECRAWL_API_KEY; do
+          for k in AI_API_KEY AI_BASE_URL AI_MODEL AI_REGISTRY_TOKEN AI_REGISTRY_URL FIRECRAWL_API_KEY E2B_API_KEY; do
             v="${!k}"; [ -n "$v" ] && printf '%s' "$v" | bunx wrangler@4 secret put "$k" --config wrangler.jsonc || true
           done
         env:
@@ -30,3 +30,4 @@ jobs:
           AI_REGISTRY_TOKEN: ${{ secrets.AI_REGISTRY_TOKEN }}
           AI_REGISTRY_URL: ${{ secrets.AI_REGISTRY_URL }}
           FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
+          E2B_API_KEY: ${{ secrets.E2B_API_KEY }}
