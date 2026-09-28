@@ -19,6 +19,7 @@ import { CopyButton } from "@/components/chat-code";
 import { Button } from "@/components/ui/button";
 import { loadCheckpoints, markTimelineRead, type Checkpoint, type TimelineEntry, type ToolRun } from "@/lib/chat-store";
 import { useChatStore } from "@/lib/use-chat-store";
+import { AgentProgress } from "@/components/agent-progress";
 export const Route = createFileRoute("/chat/$sessionId/timeline")({
   head: () => ({
     meta: [
@@ -93,7 +94,15 @@ function Timeline() {
   const done = useMemo(() => runs.filter((run) => run.output).length, [runs]);
   const active = streaming && current?.id === checkpoints.at(-1)?.id;
   const cancelled = current?.messageIds.some((id) => snapshot.sessions.find((s) => s.id === sessionId)?.messages.find((m) => m.id === id)?.parts.some((p) => p.type === "cancelled"));
-  const pending = runs.some((run) => !run.output);
+  const session = snapshot.sessions.find((s) => s.id === sessionId);
+  const agent = current?.messageIds
+    .map((id) => session?.messages.find((m) => m.id === id)?.agent)
+    .filter(Boolean)
+    .at(-1);
+  const agentDone = !!agent && (!!agent.done || ["COMPLETED", "FAILED", "ATTENTION"].includes(agent.state));
+  const isActive = !!active && !agentDone;
+  const failed = !!agent && agentDone && agent.done ? !agent.done.ok : false;
+  const pending = !isActive && !agentDone && runs.some((run) => !run.output);
   return (
     <main className="h-dvh min-w-0 overflow-y-auto overscroll-contain bg-background text-foreground">
       <header className="sticky top-0 z-20 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-border/60 bg-background/88 px-4 py-3 backdrop-blur-xl sm:px-6">
@@ -109,7 +118,7 @@ function Timeline() {
           </div>
           <p className="truncate text-[11px] text-muted-foreground">
             {current
-              ? `Proses ${(index ?? 0) + 1} dari ${checkpoints.length} · ${done}/${runs.length} langkah${active ? " · berlangsung" : ""}`
+              ? `Proses ${(index ?? 0) + 1} dari ${checkpoints.length} · ${done}/${runs.length} langkah · ${isActive ? "sedang dikerjakan" : failed ? "perlu perhatian" : "selesai"}`
               : "Belum ada proses"}
           </p>
         </div>
@@ -132,18 +141,23 @@ function Timeline() {
               total={checkpoints.length}
               onChange={setIndex}
             />
+            {agent && (
+              <div className="mb-4">
+                <AgentProgress agent={agent} sessionId={sessionId} active={isActive} />
+              </div>
+            )}
             <ol className="relative ml-1 border-l border-border/80 pl-5">
               {entries.map((entry, i) => (
                 entry.type === "think" ? (
-                  <ThinkingItem key={entry.id} entry={entry} number={i + 1} active={!!active && i === entries.length - 1} />
+                  <ThinkingItem key={entry.id} entry={entry} number={i + 1} active={isActive && i === entries.length - 1} />
                 ) : (
-                  <RunItem key={entry.id} run={entry.run} number={i + 1} sessionId={sessionId} live={!!active} />
+                  <RunItem key={entry.id} run={entry.run} number={i + 1} sessionId={sessionId} live={isActive} />
                 )
               ))}
             </ol>
-            <p role="status" className={`ml-6 flex items-center gap-2 border-l-2 py-1 pl-4 text-xs font-medium ${active || pending ? "border-primary text-muted-foreground" : cancelled ? "border-destructive text-destructive" : "border-success text-success"}`}>
-              {active || pending ? <span className="size-2 animate-pulse rounded-full bg-primary" /> : cancelled ? <CircleAlert className="size-4" /> : <Check className="size-4" />}
-              {active ? "Proses masih berjalan…" : pending ? "Ada langkah yang terhenti" : cancelled ? "Proses dibatalkan" : "Linimasa selesai"}
+            <p role="status" className={`ml-6 flex items-center gap-2 border-l-2 py-1 pl-4 text-xs font-medium ${isActive || pending ? "border-warning text-muted-foreground" : failed ? "border-warning text-warning" : cancelled ? "border-destructive text-destructive" : "border-success text-success"}`}>
+              {isActive || pending ? <span className="size-2 animate-pulse rounded-full bg-warning" /> : failed ? <CircleAlert className="size-4" /> : cancelled ? <CircleAlert className="size-4" /> : <Check className="size-4" />}
+              {isActive ? "Sedang dikerjakan…" : pending ? "Ada langkah yang terhenti" : failed ? "Selesai dengan catatan" : cancelled ? "Proses dibatalkan" : "Linimasa selesai"}
             </p>
           </>
         )}

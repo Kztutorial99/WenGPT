@@ -674,6 +674,34 @@ export const Route = createFileRoute("/api/chat")({
             /* checkpoint gagal disimpan tidak menghentikan pekerjaan */
           }
         };
+        const MS_TITLES: Record<string, string> = {
+          understand: "Memahami kebutuhan", setup: "Menyiapkan project", implement: "Implementasi",
+          test: "Pengujian", fix: "Memperbaiki error", finish: "Penyelesaian",
+        };
+        const canonMs = (id: string, title: string): string | null => {
+          const t = `${id} ${title}`.toLowerCase();
+          if (/^\s*(simpan|tulis|baca|buka|jalankan|run|write|read|edit|save|file|perintah|command)\b/.test(title.toLowerCase())) return null;
+          if (/perbaik|fix|debug|error/.test(t)) return "fix";
+          if (/tes|test|uji|verif|compile|build/.test(t)) return "test";
+          if (/selesai|final|preview|pratinjau|laporan|finish|deliver/.test(t)) return "finish";
+          if (/siap|setup|install|init|struktur|scaffold|depend/.test(t)) return "setup";
+          if (/analis|paham|kebutuh|understand|rencana|plan/.test(t)) return "understand";
+          return "implement";
+        };
+        const setMs = (id: string, status: string, detail?: string) => {
+          const title = MS_TITLES[id] ?? id;
+          const m = ckpt.milestones.find((x) => x.id === id);
+          if (m && m.status === status && !detail) return;
+          if (status === "running")
+            for (const o of ckpt.milestones)
+              if (o.id !== id && o.status === "running" && !(id === "fix" && o.id === "test")) {
+                o.status = "done";
+                emit({ t: "milestone", id: o.id, title: o.title, status: "done" });
+              }
+          if (m) Object.assign(m, { title, status, detail });
+          else ckpt.milestones.push({ id, title, status, detail });
+          emit({ t: "milestone", id, title, status: status as "running", detail });
+        };
         const MUTATING = new Set(["write_file", "edit_file", "run_command", "preview_app"]);
         const gate = (name: string) =>
           MUTATING.has(name) && intent === "need_clarification"
@@ -690,6 +718,8 @@ export const Route = createFileRoute("/api/chat")({
         const doneOp = (opId: string) => ckpt.ops[opId]?.ok === true;
         const emitFile = (path: string, op: "create" | "edit" | "write", oldText: string, newText: string, opId: string) => {
           const d = lineDiff(oldText, newText);
+          if (!["test", "fix"].some((k) => ckpt.milestones.find((m) => m.id === k && m.status === "running")))
+            setMs("implement", "running");
           ckpt.files.push({ path, op, ranges: d.ranges, diff: d.diff, opId, at: Date.now() });
           if (ckpt.files.length > 200) ckpt.files.splice(0, ckpt.files.length - 200);
           emit({ t: "file", path, op, ranges: d.ranges, diff: d.diff, added: d.added, removed: d.removed, opId });
@@ -718,11 +748,11 @@ export const Route = createFileRoute("/api/chat")({
               status: z.enum(["pending", "running", "done", "failed", "attention"]),
               detail: z.string().optional(),
             }),
-            execute: async ({ id, title, status, detail }) => {
-              const m = ckpt.milestones.find((x) => x.id === id);
-              if (m) Object.assign(m, { title, status, detail });
-              else ckpt.milestones.push({ id, title, status, detail });
-              emit({ t: "milestone", id, title, status, detail });
+            execute: async ({ id: rawId, title: rawTitle, status, detail }) => {
+              const id = canonMs(rawId, rawTitle);
+              if (!id) return { ok: true, note: "Label teknis bukan tahap; dicatat sebagai aktivitas di tahap berjalan.", milestones: ckpt.milestones };
+              const title = MS_TITLES[id]!;
+              setMs(id, status, detail ?? (rawTitle !== title ? rawTitle.slice(0, 120) : undefined));
               if (status === "running") {
                 if (/tes|test|uji|verif/i.test(title)) setState("TESTING");
                 else if (/preview|pratinjau/i.test(title)) setState("PREVIEWING");
@@ -774,7 +804,10 @@ export const Route = createFileRoute("/api/chat")({
               if (isInstall && doneOp(opId))
                 return { exitCode: 0, skipped: true, stdout: "(dilewati: install yang sama sudah berhasil sebelumnya di tugas ini)", stderr: "" };
               const isTest = /\b(g\+\+|gcc|clang|make|cmake|javac|rustc|cargo|go (build|run|test)|tsc|vite build|npm (run )?(build|test)|pytest|python3? .*test|curl)\b/.test(command);
-              if (isTest) setState("TESTING", command.slice(0, 120));
+              if (isTest) {
+                setState("TESTING", command.slice(0, 120));
+                if (!ckpt.milestones.find((m) => m.id === "fix" && m.status === "running")) setMs("test", "running");
+              }
               commandRunning++;
               const finish = async (exitCode: number, stdout: string, stderr: string) => {
                 const locations = exitCode !== 0 ? errorLocations(`${stderr}\n${stdout}`) : [];
@@ -783,8 +816,14 @@ export const Route = createFileRoute("/api/chat")({
                   unresolvedError = true;
                   ckpt.lastError = { message: (stderr || stdout).slice(0, 1500), locations, at: Date.now() };
                   setState("FIXING", locations[0] ? `${locations[0].file}:${locations[0].line}` : undefined);
+                  if (isTest) {
+                    setMs("test", "failed", "Tes/compile gagal");
+                    setMs("fix", "running", locations[0] ? `${locations[0].file}:${locations[0].line}` : undefined);
+                  }
                 } else if (isTest) {
                   unresolvedError = false;
+                  if (ckpt.milestones.find((m) => m.id === "fix")) setMs("fix", "done");
+                  setMs("test", "done", "Tes lolos");
                   ckpt.lastError = null;
                 }
                 await recordOp(opId, "run_command", exitCode === 0, command);
@@ -1209,6 +1248,7 @@ export const Route = createFileRoute("/api/chat")({
           async start(controller) {
             controllerRef = controller;
             emit({ t: "task", taskId, resumed });
+            if (!resumed) emit({ t: "status", state: "RECEIVED", label: "Menerima permintaan" });
             {
               const st = resumed ? ckpt.state : "UNDERSTANDING";
               ckpt.state = "";

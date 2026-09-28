@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   AlertTriangle,
@@ -24,6 +24,7 @@ const MARK: Record<AgentMilestone["status"], { icon: typeof Check; cls: string; 
 };
 
 const STATE_LABEL: Record<string, string> = {
+  RECEIVED: "Menerima permintaan",
   UNDERSTANDING: "Memahami kebutuhan",
   WAITING_FOR_CLARIFICATION: "Menunggu jawaban Anda",
   PLANNING: "Merencanakan",
@@ -84,6 +85,14 @@ export function AgentProgress({
 }) {
   const [showFiles, setShowFiles] = useState(false);
   const [openDiff, setOpenDiff] = useState<string | null>(null);
+  const [, tick] = useState(0);
+  const terminal = ["COMPLETED", "FAILED", "ATTENTION"].includes(agent.state) || !!agent.done;
+  const live = active && !terminal && agent.state !== "DISCONNECTED";
+  useEffect(() => {
+    if (!live) return;
+    const t = setInterval(() => tick((n) => n + 1), 2000);
+    return () => clearInterval(t);
+  }, [live]);
   const hasContent =
     agent.milestones.length > 0 ||
     agent.files.length > 0 ||
@@ -96,7 +105,9 @@ export function AgentProgress({
     state === "DISCONNECTED"
       ? (agent.label ?? STATE_LABEL[state])
       : (STATE_LABEL[state] ?? agent.label ?? state);
-  const stalled = active && agent.lastBeat && Date.now() - agent.lastBeat > 20_000;
+  const quiet = live && Date.now() - (agent.lastEventAt ?? agent.lastBeat ?? Date.now()) > 6_000;
+  const beatAlive = !agent.lastBeat || Date.now() - agent.lastBeat < 15_000;
+  const stalled = quiet && beatAlive;
   const latestByPath = [...new Map(agent.files.map((f) => [f.path, f])).values()];
 
   return (
@@ -113,7 +124,7 @@ export function AgentProgress({
           <X className="size-3.5 text-destructive" />
         ) : state === "ATTENTION" ? (
           <AlertTriangle className="size-3.5 text-warning" />
-        ) : active ? (
+        ) : live ? (
           <Loader2 className="size-3.5 animate-spin text-warning" />
         ) : (
           <Circle className="size-3.5 text-muted-foreground" />
@@ -121,14 +132,14 @@ export function AgentProgress({
         <span className="font-medium">{label}</span>
         {stalled && <span className="text-muted-foreground">· masih bekerja…</span>}
       </div>
-      {active && agent.detail && (
+      {live && agent.detail && (
         <p className="mt-0.5 truncate pl-5 text-muted-foreground">Sedang: {agent.detail}</p>
       )}
 
       {agent.milestones.length > 0 && (
         <ol className="mt-2 space-y-1 pl-1">
           {agent.milestones.map((m) => {
-            const mark = MARK[m.status];
+            const mark = MARK[!live && m.status === "running" ? (terminal && agent.done?.ok ? "done" : "attention") : m.status];
             const Icon = mark.icon;
             return (
               <li key={m.id} className="flex items-start gap-2">

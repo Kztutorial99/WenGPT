@@ -57,6 +57,7 @@ export type AgentState = {
   files: AgentFileChange[];
   lastSeq: number;
   done?: { ok: boolean; state: string; reasons: string[] } | undefined;
+  lastEventAt?: number | undefined;
   lastBeat?: number | undefined;
 };
 export type MessageData = {
@@ -598,7 +599,7 @@ async function runTurn({
           const seq = Number(event["seq"]);
           if (event.t === "done") sawDone = true;
           patchAgent(sessionId, assistantId, (agent) => {
-            const next: AgentState = { ...agent, lastSeq: seq, lastBeat: Date.now() };
+            const next: AgentState = { ...agent, lastSeq: seq, lastBeat: Date.now(), ...(event.t !== "hb" ? { lastEventAt: Date.now() } : {}) };
             if (event.t === "task") {
               next.taskId = String(event["taskId"]);
               next.done = undefined;
@@ -633,6 +634,11 @@ async function runTurn({
             } else if (event.t === "done") {
               next.done = { ok: !!event["ok"], state: String(event["state"]), reasons: (event["reasons"] as string[]) ?? [] };
               next.state = next.done.state;
+              next.detail = undefined;
+              if (["COMPLETED", "FAILED", "ATTENTION"].includes(next.state))
+                next.milestones = next.milestones.map((m) =>
+                  m.status === "running" || m.status === "pending" ? { ...m, status: next.done!.ok ? "done" : "attention" } : m,
+                );
             }
             return next;
           });
