@@ -725,7 +725,7 @@ export const Route = createFileRoute("/api/chat")({
             ckpt.lastOpId = opId;
             ckpt.lastOp = `${name}: ${summary.slice(0, 200)}`;
           }
-          await saveCkpt();
+          void saveCkpt();
         };
         const doneOp = (opId: string) => ckpt.ops[opId]?.ok === true;
         const emitFile = (path: string, op: "create" | "edit" | "write", oldText: string, newText: string, opId: string) => {
@@ -1237,7 +1237,8 @@ export const Route = createFileRoute("/api/chat")({
           tools,
           stopWhen: stepCountIs(50),
           abortSignal: request.signal,
-          providerOptions: { openai: { reasoningEffort: (needsThink ? "medium" : "low") as never } },
+          // Mode berpikir hanya aktif untuk analisis/debug. Permintaan biasa tanpa reasoning supaya cepat.
+          ...(needsThink ? { providerOptions: { openai: { reasoningEffort: "medium" as never } } } : {}),
         });
 
         const toolStartedAt = new Map<string, number>();
@@ -1252,6 +1253,8 @@ export const Route = createFileRoute("/api/chat")({
         let streamFailed = false;
         let finalText = "";
         let calledSecret = false;
+        let lastInputBeat = 0;
+        let lastThinkBeat = 0;
         const pushText = (final: boolean) => {
           const { think, rest } = splitThink(rawText);
           if (think.length > sentThink.length && think.startsWith(sentThink)) sentThink = think;
@@ -1281,7 +1284,7 @@ export const Route = createFileRoute("/api/chat")({
               ckpt.state = "";
               setState(st === "COMPLETED" || st === "FAILED" || st === "ATTENTION" ? "EXECUTING" : st);
             }
-            const hb = setInterval(() => emit({ t: "hb" }), 5000);
+            const hb = setInterval(() => emit({ t: "hb" }), 4000);
             try {
               for await (const part of result.fullStream) {
                 if (part.type === "text-delta") {
@@ -1300,6 +1303,9 @@ export const Route = createFileRoute("/api/chat")({
                   if (ckpt.state === "UNDERSTANDING" && !sentUnderstanding) {
                     sentUnderstanding = true;
                     setState("UNDERSTANDING");
+                  } else if (Date.now() - lastThinkBeat > 3000) {
+                    lastThinkBeat = Date.now();
+                    emit({ t: "status", state: ckpt.state, label: "Berpikir", detail: "Berpikir" });
                   }
                 } else if (part.type === "finish-step") {
                   resetStep();
@@ -1308,9 +1314,16 @@ export const Route = createFileRoute("/api/chat")({
                   const buf = (inputBuf.get(part.id) ?? "") + part.delta;
                   inputBuf.set(part.id, buf);
                   const fp = buf.match(/"path"\s*:\s*"([^"]+)"/)?.[1]?.split("/").pop();
+                  const verb = inputName.get(part.id) === "edit_file" ? "Mengubah" : "Menulis";
                   if (fp && !announced.has(part.id)) {
                     announced.add(part.id);
-                    setState("EXECUTING", `${inputName.get(part.id) === "edit_file" ? "Mengubah" : "Menulis"} ${fp}`);
+                    lastInputBeat = Date.now();
+                    setState("EXECUTING", `${verb} ${fp}`);
+                  } else if (fp && Date.now() - lastInputBeat > 1200) {
+                    // Kabar berkala selama model menulis isi file, supaya layar tidak terlihat macet.
+                    lastInputBeat = Date.now();
+                    const lines = buf.split("\\n").length;
+                    setState("EXECUTING", `${verb} ${fp} · ${lines} baris`);
                   }
                 } else if (part.type === "tool-input-start") {
                   resetStep();
@@ -1389,11 +1402,12 @@ export const Route = createFileRoute("/api/chat")({
               const ok = reasons.length === 0;
               const state = waiting && ok ? "WAITING_FOR_CLARIFICATION" : ok ? "COMPLETED" : streamFailed || request.signal.aborted ? "FAILED" : "ATTENTION";
               ckpt.state = state;
-              if (sandbox) {
-                await saveCkpt();
-                if (ok && !waiting) await sandbox.files.remove(ckptPath).catch(() => null);
-              }
+              // Kabari browser dulu, baru simpan checkpoint: jawaban tidak tertahan menunggu sandbox.
               emit({ t: "done", ok, state, reasons });
+              if (sandbox) {
+                if (ok && !waiting) await sandbox.files.remove(ckptPath).catch(() => null);
+                else await saveCkpt();
+              }
               if (sandbox) {
                 const logPath = `${ckptDir}/events-${taskId}.ndjson`;
                 const prev = await sandbox.files.read(logPath).catch(() => "");

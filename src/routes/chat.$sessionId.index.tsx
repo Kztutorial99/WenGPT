@@ -38,6 +38,7 @@ import {
 import { applySecretResults, loadAllFiles, type SavedFile } from "@/lib/chat-store";
 import { FilePreview } from "@/components/file-preview";
 import { AgentProgress } from "@/components/agent-progress";
+import { ConnectionStatus } from "@/components/connection-status";
 import { useChatStore } from "@/lib/use-chat-store";
 import { useViewportBox } from "@/lib/viewport";
 
@@ -226,6 +227,7 @@ function Chat() {
             <span>WenGPT</span>
             <span className="rounded-md border border-brand-line px-2 py-0.5 text-primary">Prime</span>
           </h1>
+          <ConnectionStatus reconnecting={last?.role === "assistant" && streaming && last.agent?.state === "RECEIVED"} />
         </div>
         <div className="flex items-center justify-center border-t border-border/60 px-1 py-0.5 sm:justify-end sm:border-0 sm:p-0">
           <AppNav sessionId={sessionId} />
@@ -358,7 +360,7 @@ function Chat() {
                             className="h-7 gap-1.5 rounded-full border-border/70 bg-card/60 px-3 text-xs font-medium"
                           >
                             <RotateCcw className="size-3" />
-                            Lanjutkan jawaban
+                            Coba lagi
                           </Button>
                         )}
                       </div>
@@ -405,25 +407,49 @@ function Chat() {
                         Proses selesai. Lihat hasil lengkapnya di Linimasa{sources.length ? " atau sumber di bawah" : ""}.
                       </p>
                     )}
+                  {message.role === "assistant" && message.id === last?.id && !streaming && !work &&
+                    (message.agent?.state === "DISCONNECTED" || message.agent?.state === "PAUSED") &&
+                    !message.parts.some((part) => part.type === "cancelled") && (
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <span className="text-xs text-warning">{message.agent.label ?? "Koneksi terputus"}</span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void resumeSession(sessionId)}
+                          className="h-7 gap-1.5 rounded-full border-border/70 bg-card/60 px-3 text-xs font-medium"
+                        >
+                          <RotateCcw className="size-3" />
+                          Coba lagi
+                        </Button>
+                      </div>
+                    )}
                   {!active && sources.length > 0 && <WebSources sources={sources} />}
                 </MessageContent>
               </Message>
             )})
           )}
-          {streaming && lastAssistant &&
-            !(() => {
-              // Titik-titik tampil selama AI bekerja; hilang hanya saat teks jawaban sedang mengalir.
-              const tail = lastAssistant.parts[lastAssistant.parts.length - 1];
-              const writing = /^(Menyiapkan file|Menulis|Mengubah)/.test(lastAssistant.agent?.detail ?? "") && !lastAssistant.parts.some((p) => p.type === "tool");
-              return tail?.type === "text" && tail.text.trim().length > 0 && !writing;
-            })() && (
-            <div className="flex items-center gap-2.5 text-sm" role="status">
-              <AiDots />
-              {/^(Menyiapkan file|Menulis|Mengubah)/.test(lastAssistant.agent?.detail ?? "") && !lastAssistant.parts.some((p) => p.type === "tool") && (
-                <span className="text-xs text-muted-foreground">{lastAssistant.agent?.detail}…</span>
-              )}
-            </div>
-          )}
+          {streaming && lastAssistant && (() => {
+            // Titik-titik hanya saat menunggu: hilang ketika teks jawaban mengalir
+            // atau ketika kartu kerja (Linimasa) sudah menampilkan progresnya sendiri.
+            const tail = lastAssistant.parts[lastAssistant.parts.length - 1];
+            if (tail?.type === "text" && tail.text.trim().length > 0) return null;
+            const cp = checkpoints.find((item) => item.messageIds.includes(lastAssistant.id));
+            if (isWorkCheckpoint(cp, lastAssistant.agent)) return null;
+            const a = lastAssistant.agent;
+            const hint =
+              !a || a.state === "RECEIVED"
+                ? "Menyambungkan"
+                : a.detail && /^(Berpikir|Menyiapkan file|Menulis|Mengubah)/.test(a.detail)
+                  ? a.detail
+                  : "";
+            return (
+              <div className="flex items-center gap-2.5 text-sm" role="status">
+                <AiDots />
+                {hint && <span className="text-xs text-muted-foreground">{hint}…</span>}
+              </div>
+            );
+          })()}
         </ConversationContent>
         <ConversationScrollButton
           className="bottom-3 z-30 size-9 border-border/70 bg-card/95 shadow-panel"

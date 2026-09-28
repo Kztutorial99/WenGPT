@@ -47,3 +47,7 @@
 - [ ] Cek kenapa WenGPT belum dapat respons AI walau sesi Kaggle running (17 Sep 09:17 UTC)
 - [ ] Pastikan putaran watchdog berikutnya restart akun 3 (sesi hidup tapi AI mati, fail 1/2)
 - [x] Sinkronkan indikator respons dengan status tugas, sembunyikan Linimasa untuk chat biasa, lalu uji live
+- [x] Mode berpikir hanya untuk analisis/debug; progres tulis file & berpikir dikirim berkala
+- [x] Hapus animasi Implementasi ganda; titik-titik hanya saat menunggu
+- [x] Coba lagi tidak macet: pengawas koneksi 25 dtk, animasi berhenti saat terputus/dihentikan
+- [x] Indikator koneksi Offline/Menyambungkan/Tersambung di navigasi atas

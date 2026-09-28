@@ -107,7 +107,7 @@ export function AgentProgress({
   const terminal = ["COMPLETED", "FAILED", "ATTENTION"].includes(agent.state) || !!agent.done;
   // Saat AI sudah menulis jawaban hasil, pekerjaan dianggap beres: animasi berhenti.
   const wrapping = answering && !terminal;
-  const live = active && !terminal && !answering && agent.state !== "DISCONNECTED";
+  const live = active && !terminal && !answering && agent.state !== "DISCONNECTED" && agent.state !== "PAUSED";
   useEffect(() => {
     if (!live) return;
     const t = setInterval(() => tick((n) => n + 1), 2000);
@@ -127,8 +127,8 @@ export function AgentProgress({
     : live && agent.detail && /^(Membuat|Mengubah|Menulis|Menguji|Menyiapkan|Memperbaiki|Menyimpan)/.test(agent.detail)
     ? agent.detail
     : runningStep
-    ? runningStep.title
-    : state === "DISCONNECTED"
+    ? (live && agent.detail ? friendlyDetail(agent.detail) : STATE_LABEL[state] ?? runningStep.title)
+    : state === "DISCONNECTED" || state === "PAUSED"
       ? (agent.label ?? STATE_LABEL[state])
       : (STATE_LABEL[state] ?? agent.label ?? state);
   const quiet = live && Date.now() - (agent.lastEventAt ?? agent.lastBeat ?? Date.now()) > 6_000;
@@ -142,7 +142,7 @@ export function AgentProgress({
       aria-live="polite"
     >
       <div className="flex items-center gap-2">
-        {state === "DISCONNECTED" ? (
+        {state === "DISCONNECTED" || state === "PAUSED" ? (
           <WifiOff className="size-3.5 text-warning" />
         ) : state === "COMPLETED" || wrapping ? (
           <Check className="size-3.5 text-success" />
@@ -150,7 +150,10 @@ export function AgentProgress({
           <X className="size-3.5 text-destructive" />
         ) : state === "ATTENTION" ? (
           <AlertTriangle className="size-3.5 text-warning" />
-        ) : live && (runningStep || !quiet) ? (
+        ) : live && runningStep ? (
+          // Tahap berjalan sudah punya spinner di daftar; di judul cukup titik berdenyut (hindari animasi ganda).
+          <span className="grid size-3.5 place-items-center"><span className="size-2 animate-pulse rounded-full bg-warning" /></span>
+        ) : live && !quiet ? (
           <Loader2 className="size-3.5 animate-spin text-warning" />
         ) : (
           <Circle className="size-3.5 text-muted-foreground" />
@@ -158,7 +161,7 @@ export function AgentProgress({
         <span className="font-medium">{label}</span>
         {stalled && <span className="text-muted-foreground">· masih bekerja…</span>}
       </div>
-      {live && agent.detail && friendlyDetail(agent.detail) !== label && (
+      {live && !runningStep && agent.detail && friendlyDetail(agent.detail) !== label && (
         <p className="mt-0.5 truncate pl-5 text-muted-foreground">{friendlyDetail(agent.detail)}</p>
       )}
 
@@ -241,7 +244,7 @@ export function AgentProgress({
         </ul>
       )}
 
-      {state === "DISCONNECTED" && !active && onResume && (
+      {(state === "DISCONNECTED" || state === "PAUSED") && !active && onResume && (
         <Button
           type="button"
           variant="outline"
@@ -250,7 +253,7 @@ export function AgentProgress({
           className="mt-2 h-7 gap-1.5 rounded-full px-3 text-xs"
         >
           <RotateCcw className="size-3" />
-          Lanjutkan dari checkpoint
+          Coba lagi
         </Button>
       )}
     </div>

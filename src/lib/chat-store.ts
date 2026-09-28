@@ -136,11 +136,59 @@ const serverState: State = {
 };
 const listeners = new Set<() => void>();
 const controllers = new Map<string, AbortController>();
+/** Controller yang diputus oleh pengawas koneksi (bukan oleh tombol Stop). */
+const watchdogAborted = new WeakSet<AbortController>();
+const STALL_MS = 25_000;
 
-function emit() {
-  listeners.forEach((listener) => listener());
+/** Tutup semua animasi kerja yang masih berjalan saat tugas terhenti. */
+function settleParts(parts: Part[]): Part[] {
+  return parts.map((part) =>
+    part.type === "tool" && !part.run.output
+      ? { ...part, run: { ...part.run, output: { ok: false, cancelled: true } as unknown as ToolOut, finishedAt: Date.now() } }
+      : part,
+  );
 }
+function settleAgent(agent: AgentState, state: string, label?: string): AgentState {
+  return {
+    ...agent,
+    state,
+    ...(label ? { label } : {}),
+    detail: undefined,
+    endedAt: Date.now(),
+    milestones: agent.milestones.map((m) => (m.status === "running" ? { ...m, status: "pending" } : m)),
+  };
+}
+
+// Satukan banyak pembaruan (tiap token) menjadi satu render per frame supaya chat tetap ringan di HP.
+let emitQueued = false;
+function emit() {
+  if (typeof window === "undefined" || typeof requestAnimationFrame !== "function") {
+    listeners.forEach((listener) => listener());
+    return;
+  }
+  if (emitQueued) return;
+  emitQueued = true;
+  requestAnimationFrame(() => {
+    emitQueued = false;
+    listeners.forEach((listener) => listener());
+  });
+}
+// Simpan ke penyimpanan browser paling sering tiap 600 ms, bukan di setiap token.
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
 function save() {
+  if (typeof window === "undefined") return;
+  if (saveTimer) return;
+  saveTimer = setTimeout(flushSave, 600);
+}
+if (typeof window !== "undefined") {
+  window.addEventListener("pagehide", () => flushSave());
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushSave();
+  });
+}
+function flushSave() {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = null;
   if (typeof window === "undefined") return;
   const data = () =>
     JSON.stringify({
@@ -243,6 +291,18 @@ export function bootChatStore() {
     }
   }
   if (sessions.length === 0) sessions = [newSession()];
+  // Tugas yang masih "berjalan" saat halaman ditutup: tandai terputus supaya bisa Coba lagi, bukan animasi abadi.
+  sessions = sessions.map((session) => {
+    const last = session.messages.at(-1);
+    if (last?.role !== "assistant" || !last.agent || last.agent.done) return session;
+    if (["DISCONNECTED", "PAUSED", "COMPLETED", "FAILED", "ATTENTION", "WAITING_FOR_CLARIFICATION"].includes(last.agent.state)) return session;
+    return {
+      ...session,
+      messages: session.messages.map((m) =>
+        m === last ? { ...m, parts: settleParts(m.parts), agent: settleAgent(last.agent!, "DISCONNECTED", "Koneksi terputus — tekan Coba lagi") } : m,
+      ),
+    };
+  });
   if (!activeId || !sessions.some((s) => s.id === activeId)) activeId = sessions[0]?.id ?? null;
   state = { ...state, ready: true, sessions, activeId, attachments, fileOps, folders, read };
   save();
@@ -327,17 +387,8 @@ export function stopSession(id: string) {
   const session = state.sessions.find((s) => s.id === id);
   const last = session?.messages.at(-1);
   if (last?.role === "assistant") {
-    patchAssistant(id, last.id, (parts) => [
-      ...parts.map((part) =>
-        part.type === "tool" && !part.run.output
-          ? {
-              ...part,
-              run: { ...part.run, output: { ok: false, cancelled: true } as unknown as ToolOut, finishedAt: Date.now() },
-            }
-          : part,
-      ),
-      { type: "cancelled" } as Part,
-    ]);
+    patchAssistant(id, last.id, (parts) => [...settleParts(parts), { type: "cancelled" } as Part]);
+    if (last.agent && !last.agent.done) patchAgent(id, last.id, (agent) => settleAgent(agent, "PAUSED", "Dihentikan"));
   }
   state = { ...state, streamingIds: state.streamingIds.filter((value) => value !== id) };
   save();
@@ -516,8 +567,28 @@ async function runTurn({
 }: TurnOptions) {
   const controller = new AbortController();
   controllers.set(sessionId, controller);
-  state = { ...state, streamingIds: [...state.streamingIds, sessionId] };
+  state = { ...state, streamingIds: [...state.streamingIds.filter((id) => id !== sessionId), sessionId] };
+  // Mulai ulang status kerja (penting untuk tombol Coba lagi) supaya tidak tersisa status lama.
+  if (getSession(sessionId)?.messages.find((m) => m.id === assistantId)?.agent)
+    patchAgent(sessionId, assistantId, (agent) => ({
+      ...agent,
+      state: "RECEIVED",
+      label: "Menyambungkan ke server",
+      detail: undefined,
+      done: undefined,
+      endedAt: undefined,
+      lastBeat: Date.now(),
+      lastEventAt: Date.now(),
+    }));
   emit();
+  // Pengawas: jika server diam lebih dari 25 detik (sinyal hilang), putuskan supaya tidak menggantung.
+  let lastByte = Date.now();
+  const watchdog = setInterval(() => {
+    if (Date.now() - lastByte > STALL_MS && !controller.signal.aborted) {
+      watchdogAborted.add(controller);
+      controller.abort();
+    }
+  }, 3000);
   try {
     const response = await fetch("/api/chat", {
       method: "POST",
@@ -573,6 +644,7 @@ async function runTurn({
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
+      lastByte = Date.now();
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split("\n");
       buffer = lines.pop() ?? "";
@@ -712,19 +784,27 @@ async function runTurn({
       }
     }
     if (!sawDone && !controller.signal.aborted)
-      patchAgent(sessionId, assistantId, (agent) => ({ ...agent, state: "DISCONNECTED", endedAt: Date.now(), label: "Koneksi terputus — pekerjaan tetap tersimpan" }));
+      markDisconnected(sessionId, assistantId, "Koneksi terputus — pekerjaan tetap tersimpan");
   } catch (error) {
-    if (!controller.signal.aborted && (error as Error).name !== "AbortError") {
-      patchAgent(sessionId, assistantId, (agent) => ({ ...agent, state: "DISCONNECTED", endedAt: Date.now(), label: humanError((error as Error).message) }));
+    if (watchdogAborted.has(controller)) {
+      markDisconnected(sessionId, assistantId, "Server tidak merespons — tekan Coba lagi");
+    } else if (!controller.signal.aborted && (error as Error).name !== "AbortError") {
+      markDisconnected(sessionId, assistantId, humanError((error as Error).message));
     }
   } finally {
+    clearInterval(watchdog);
     if (controllers.get(sessionId) === controller) controllers.delete(sessionId);
-    if (!controller.signal.aborted) {
+    if (!controller.signal.aborted || watchdogAborted.has(controller)) {
       state = { ...state, streamingIds: state.streamingIds.filter((id) => id !== sessionId) };
       save();
       emit();
     }
   }
+}
+
+function markDisconnected(sessionId: string, assistantId: string, label: string) {
+  patchAssistant(sessionId, assistantId, settleParts);
+  patchAgent(sessionId, assistantId, (agent) => settleAgent(agent, "DISCONNECTED", label));
 }
 
 export async function sendMessage(
@@ -807,7 +887,7 @@ export async function resumeSession(sessionId: string) {
   const last = session.messages.at(-1);
   if (!last || last.role !== "assistant") return;
   const interrupted = last.parts.some((part) => part.type === "cancelled");
-  const disconnected = last.agent?.state === "DISCONNECTED" || last.agent?.state === "FAILED";
+  const disconnected = ["DISCONNECTED", "FAILED", "PAUSED"].includes(last.agent?.state ?? "");
   if (!interrupted && !disconnected) return;
   const cleaned: MessageData = {
     ...last,
