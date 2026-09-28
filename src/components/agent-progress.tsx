@@ -124,13 +124,15 @@ export function AgentProgress({
   const runningStep = live ? agent.milestones.find((m) => m.status === "running") : undefined;
   const label = wrapping
     ? "Menyiapkan laporan hasil"
+    : live && agent.label && !["Berpikir", "Implementasi"].includes(agent.label)
+    ? agent.label
     : live && agent.detail && /^(Membuat|Mengubah|Menulis|Menguji|Menyiapkan|Memperbaiki|Menyimpan)/.test(agent.detail)
     ? agent.detail
     : runningStep
     ? (live && agent.detail ? friendlyDetail(agent.detail) : STATE_LABEL[state] ?? runningStep.title)
     : state === "DISCONNECTED" || state === "PAUSED"
       ? (agent.label ?? STATE_LABEL[state])
-      : (STATE_LABEL[state] ?? agent.label ?? state);
+       : (STATE_LABEL[state] ?? agent.label ?? state);
   const quiet = live && Date.now() - (agent.lastEventAt ?? agent.lastBeat ?? Date.now()) > 6_000;
   const beatAlive = !agent.lastBeat || Date.now() - agent.lastBeat < 15_000;
   const stalled = quiet && beatAlive;
@@ -161,13 +163,14 @@ export function AgentProgress({
         <span className="font-medium">{label}</span>
         {stalled && <span className="text-muted-foreground">· masih bekerja…</span>}
       </div>
-      {live && !runningStep && agent.detail && friendlyDetail(agent.detail) !== label && (
+      {live && !runningStep && agent.detail && !/^Berpikir/.test(agent.detail) && friendlyDetail(agent.detail) !== label && (
         <p className="mt-0.5 truncate pl-5 text-muted-foreground">{friendlyDetail(agent.detail)}</p>
       )}
 
       {agent.milestones.length > 0 && (
         <ol className="mt-2 space-y-1 pl-1">
           {agent.milestones.map((m) => {
+            if (live && m.status === "running" && m.title === label) return null;
             const mark = MARK[!live && (m.status === "running" || (wrapping && m.status === "pending")) ? (wrapping || (terminal && agent.done?.ok) ? "done" : "attention") : m.status];
             const Icon = mark.icon;
             return (

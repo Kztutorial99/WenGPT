@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 type Conn = "offline" | "connecting" | "online";
+let cachedConnection: Conn = "connecting";
 
 const TEXT: Record<Conn, string> = {
   offline: "Offline",
@@ -10,7 +11,11 @@ const TEXT: Record<Conn, string> = {
 
 /** Indikator kecil di navigasi atas: internet putus / menyambung ke server / tersambung. */
 export function ConnectionStatus({ reconnecting = false }: { reconnecting?: boolean }) {
-  const [conn, setConn] = useState<Conn>("connecting");
+  const [conn, updateConn] = useState<Conn>(cachedConnection);
+  const setConn = (value: Conn | ((previous: Conn) => Conn)) => {
+    cachedConnection = typeof value === "function" ? value(cachedConnection) : value;
+    updateConn(cachedConnection);
+  };
   const busy = useRef(false);
 
   useEffect(() => {
@@ -41,7 +46,6 @@ export function ConnectionStatus({ reconnecting = false }: { reconnecting?: bool
     };
     const onVisible = () => {
       if (document.visibilityState === "visible") {
-        setConn((c) => (c === "offline" ? c : "connecting"));
         void check();
       }
     };

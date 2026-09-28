@@ -227,7 +227,7 @@ function Chat() {
             <span>WenGPT</span>
             <span className="rounded-md border border-brand-line px-2 py-0.5 text-primary">Prime</span>
           </h1>
-          <ConnectionStatus reconnecting={last?.role === "assistant" && streaming && last.agent?.state === "RECEIVED"} />
+          <ConnectionStatus />
         </div>
         <div className="flex items-center justify-center border-t border-border/60 px-1 py-0.5 sm:justify-end sm:border-0 sm:p-0">
           <AppNav sessionId={sessionId} />
@@ -323,6 +323,9 @@ function Chat() {
                       <WenGptMark className="size-4" />
                     </span>
                     WenGPT Prime
+                    {active && message.agent?.label === "Berpikir" && !work && (
+                      <span className="ml-1 rounded-full border border-border/70 px-2 py-0.5 text-[10px] font-normal text-muted-foreground">Berpikir</span>
+                    )}
                   </div>
                 )}
                 <MessageContent
@@ -437,16 +440,11 @@ function Chat() {
             const cp = checkpoints.find((item) => item.messageIds.includes(lastAssistant.id));
             if (isWorkCheckpoint(cp, lastAssistant.agent)) return null;
             const a = lastAssistant.agent;
-            const hint =
-              !a || a.state === "RECEIVED"
-                ? "Menyambungkan"
-                : a.detail && /^(Berpikir|Menyiapkan file|Menulis|Mengubah)/.test(a.detail)
-                  ? a.detail
-                  : "";
+            const hint = !a || a.state === "RECEIVED" ? "Menyambungkan" : "";
             return (
               <div className="flex items-center gap-2.5 text-sm" role="status">
                 <AiDots />
-                {hint && <span className="text-xs text-muted-foreground">{hint}…</span>}
+                {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
               </div>
             );
           })()}

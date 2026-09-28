@@ -36,6 +36,23 @@
   ::-webkit-scrollbar { width: 8px; height: 8px; } ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; } ::-webkit-scrollbar-track { background: transparent; }
 }
 @utility brand-mark { display: grid; place-items: center; flex-shrink: 0; border: 1px solid var(--brand-line); border-radius: .4rem; color: var(--primary); background: color-mix(in oklab, var(--card) 90%, transparent); box-shadow: 0 10px 28px -18px oklch(.61 .215 25 / .7); }
+
+/* Kotak hadir dahulu, lalu simbol muncul dengan kilau singkat; tidak berputar tanpa henti. */
+@keyframes wengpt-mark-reveal {
+  0% { opacity: 0; transform: scale(.72) rotate(-8deg); }
+  62% { opacity: 1; transform: scale(1.065) rotate(2deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0); }
+}
+@keyframes wengpt-symbol-reveal {
+  0%, 30% { opacity: 0; transform: scale(.5) rotate(-30deg); filter: blur(3px); }
+  75% { opacity: 1; transform: scale(1.1) rotate(4deg); filter: blur(0); }
+  100% { opacity: 1; transform: scale(1) rotate(0); filter: blur(0); }
+}
+.brand-mark { animation: wengpt-mark-reveal .75s cubic-bezier(.2,.8,.2,1) both; }
+.brand-mark > svg { animation: wengpt-symbol-reveal .95s cubic-bezier(.2,.8,.2,1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .brand-mark, .brand-mark > svg { animation: none; }
+}
 @utility cyber-grid {
   background-image: linear-gradient(to right, var(--grid) 1px, transparent 1px), linear-gradient(to bottom, var(--grid) 1px, transparent 1px), linear-gradient(to bottom, oklch(.27 .07 25 / .18), transparent 65%);
   background-size: 70px 70px, 70px 70px, 100% 100%;

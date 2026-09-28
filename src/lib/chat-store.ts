@@ -446,7 +446,7 @@ function patchAgent(sessionId: string, assistantId: string, update: (agent: Agen
 /** Ubah error teknis jadi penjelasan yang bisa dipahami pengguna. */
 export function humanError(raw: string): string {
   const t = raw.toLowerCase();
-  if (typeof navigator !== "undefined" && !navigator.onLine) return "Internet sedang terputus. Pekerjaan tersimpan; akan disambung saat online lagi.";
+  if (typeof navigator !== "undefined" && !navigator.onLine) return "Internet sedang terputus. Pekerjaan tersimpan; tekan Coba lagi setelah tersambung.";
   if (/abort/.test(t)) return "Permintaan dibatalkan.";
   if (/failed to fetch|fetch failed|network|load failed|stream|terminated|econnreset/.test(t)) return "Koneksi ke WenGPT terputus. Pekerjaan tersimpan — tekan Lanjutkan untuk menyambung.";
   if (/server ai|provider|model|rate limit|429|quota/.test(t)) return "Layanan AI sedang bermasalah. Coba lanjutkan sebentar lagi.";
@@ -930,7 +930,7 @@ export function loadCheckpoints(sessionId: string): Checkpoint[] {
       }
     });
   }
-  return list.filter((checkpoint) => checkpoint.entries.length);
+  return list.filter((checkpoint) => checkpoint.messageIds.length);
 }
 
 const WORK_TOOL_NAMES = new Set([
@@ -953,7 +953,8 @@ export function isWorkCheckpoint(checkpoint: Checkpoint | undefined, agent?: Age
   return (
     (agent?.milestones.length ?? 0) > 0 ||
     (agent?.files.length ?? 0) > 0 ||
-    checkpoint.runs.some((run) => WORK_TOOL_NAMES.has(run.name))
+    checkpoint.runs.some((run) => WORK_TOOL_NAMES.has(run.name)) ||
+    ["EXECUTING", "TESTING", "FIXING", "PREVIEWING"].includes(agent?.state ?? "")
   );
 }
 export function normalizePath(path: string) {
@@ -1320,16 +1321,4 @@ export function applySecretResults(
   );
 }
 
-// HP masuk background / internet putus bukan kegagalan: saat kembali aktif, sambung ulang tugas yang terputus.
-if (typeof window !== "undefined") {
-  const reconnect = () => {
-    if (document.visibilityState !== "visible" || !navigator.onLine) return;
-    for (const session of state.sessions) {
-      const last = session.messages.at(-1);
-      if (last?.role === "assistant" && last.agent?.state === "DISCONNECTED" && !isStreaming(session.id))
-        void resumeSession(session.id);
-    }
-  };
-  document.addEventListener("visibilitychange", reconnect);
-  window.addEventListener("online", reconnect);
-}
+// Tugas yang terputus menunggu pengguna menekan Coba lagi, termasuk setelah internet kembali.

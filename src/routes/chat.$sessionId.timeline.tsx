@@ -105,9 +105,12 @@ function Timeline() {
     .filter(Boolean)
     .at(-1);
   const agentDone = !!agent && (!!agent.done || ["COMPLETED", "FAILED", "ATTENTION"].includes(agent.state));
-  const isActive = !!active && !agentDone;
+  const assistant = current?.messageIds.map((id) => session?.messages.find((m) => m.id === id)).filter(Boolean).at(-1);
+  const lastToolIndex = assistant?.parts.findLastIndex((part) => part.type === "tool") ?? -1;
+  const answering = lastToolIndex >= 0 && !!assistant?.parts.slice(lastToolIndex + 1).some((part) => part.type === "text" && part.text.trim());
+  const isActive = !!active && !agentDone && !answering;
   const failed = !!agent && agentDone && agent.done ? !agent.done.ok : false;
-  const pending = !isActive && !agentDone && runs.some((run) => !run.output);
+  const pending = !active && !agentDone && runs.some((run) => !run.output);
   return (
     <main className="h-dvh min-w-0 overflow-y-auto overscroll-contain bg-background text-foreground">
       <header className="sticky top-0 z-20 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-border/60 bg-background/88 px-4 py-3 backdrop-blur-xl sm:px-6">
@@ -123,7 +126,7 @@ function Timeline() {
           </div>
           <p className="truncate text-[11px] text-muted-foreground">
             {current
-              ? `${agent?.label ?? (isActive ? "Mengerjakan project" : failed ? "Perlu perhatian" : "Selesai")} · ${done}/${runs.length} aktivitas`
+              ? `${isActive ? (agent?.label && agent.label !== "Berpikir" ? agent.label : agent?.detail && agent.detail !== "Berpikir" ? agent.detail : "Mengerjakan tugas") : failed ? "Perlu perhatian" : cancelled ? "Dibatalkan" : pending ? "Terhenti" : "Selesai"} · ${done}/${runs.length} aktivitas`
               : "Belum ada proses"}
           </p>
         </div>

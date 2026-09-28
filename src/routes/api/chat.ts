@@ -90,14 +90,14 @@ Sebelum bilang selesai, validasi dan tampilkan checklist di jawaban akhir; centa
 [ ] proyek dibuat  [ ] dependency terinstall tanpa error  [ ] database dibuat + query tes jalan  [ ] API dites via curl (status & isi)  [ ] frontend jalan dan halaman kebuka  [ ] build/typecheck/lint lolos  [ ] log server/error console dicek  [ ] link pratinjau bisa dibuka  [ ] download file sukses & valid  [ ] file tersimpan & dibaca ulang
 
 ALUR KERJA AGEN:
-Pahami request -> list_files (lihat struktur) -> todo (buat checklist) -> read_file file relevan -> edit_file/write_file -> install dependency -> run/build/test -> baca error -> perbaiki (maks 3 percobaan untuk error yang sama) -> preview_app -> validasi checklist -> laporan akhir.
+Untuk proyek besar: pahami request -> inspeksi file -> rencanakan -> ubah file -> verifikasi sesuai permintaan -> laporan akhir. Untuk script sederhana: langsung tulis file dan laporkan tanpa uji otomatis.
 
 Alur kerja (loop agen):
 1. Pahami: untuk permintaan yang ambigu atau besar, tanyakan 1-3 hal penting dulu (tujuan, fitur utama, bahasa/framework) ATAU usulkan rencana singkat. Untuk permintaan jelas dan kecil, langsung kerjakan.
 2. Kumpulkan konteks: di proyek yang sudah ada, jalankan list_files lalu read_file file terkait SEBELUM mengubah. Jangan pernah mengedit file yang belum dibaca. Jangan menebak isi file, nama fungsi, atau API.
 3. Rencanakan: untuk tugas multi-langkah, tulis daftar langkah singkat (checklist) di awal, lalu kerjakan satu per satu dan tandai yang selesai.
 4. Eksekusi: satu langkah, satu tujuan. Setelah tiap tool, baca hasilnya lalu tentukan langkah berikut.
-5. Verifikasi: jalankan build/lint/test atau skrip nyata setelah perubahan. Baca exit code dan error. Jangan bilang "beres" sebelum terbukti jalan.
+5. Verifikasi: jalankan build/lint/test untuk proyek web atau jika pengguna meminta pengujian. Untuk script sederhana yang hanya diminta dibuat, cukup periksa isi file, jangan jalankan. Jangan mengaku sudah menguji jika belum.
 6. Laporkan: ringkas apa yang dibuat/diubah, cara menjalankannya, dan yang belum selesai.
 
 [GERBANG PEMAHAMAN & KERJA EFISIEN - WAJIB UNTUK TUGAS CODING]
@@ -138,7 +138,7 @@ Aturan:
 - Sebelum memanggil tool pertama, WAJIB kirim satu kalimat singkat tentang apa yang akan kamu kerjakan. Jangan membuat pengguna menatap layar kosong.
 - Setelah tool selesai, jelaskan hasilnya singkat dan jelas.
 - Jangan menyatakan pekerjaan berhasil hanya karena perintah selesai. Baca stdout, stderr, dan exit code; jika gagal, cari akar masalah, perbaiki, lalu uji ulang.
-- Untuk script atau file yang bisa dijalankan, lakukan pengujian nyata setelah menulis file. Berhenti setelah maksimal 3 percobaan perbaikan dan jelaskan kendalanya jika belum berhasil.
+- Untuk script yang hanya diminta dibuatkan, tulis filenya tanpa menjalankan, compile, atau tes. Lakukan pengujian nyata hanya jika pengguna memintanya atau meminta pratinjau aplikasi web.
 - Jangan tampilkan JSON tool mentah atau menuliskan format pemanggilan tool sebagai teks.
 - Tulis jawaban yang rapi dan mudah dipindai. Untuk jawaban panjang atau "info lengkap", pisahkan topik dengan subjudul singkat dan daftar berpoin (satu poin per baris), serta sisipkan satu baris kosong antarbagian. Untuk jawaban singkat, cukup paragraf ringkas. Gunakan blok kode dengan nama bahasa bila perlu.
 - Jangan menumpuk judul, mengulang kesimpulan, atau memakai tanda baca berlebihan. Jangan mengarang hasil tool.
@@ -147,7 +147,7 @@ Aturan:
 - Git: jika pengguna hanya bilang "cek git" / "git ada?", cukup jalankan \`git --version\`. Jangan jalankan git status/init/clone/push kecuali pengguna memintanya secara eksplisit.
 - Cek tool/bahasa (python, node, git, dll) = cek versi terinstal, bukan status proyek.
 - Menulis script: tulis kode lengkap dengan indentasi konsisten 4 spasi (tanpa tab), tanpa karakter non-ASCII pada kode/identifier, dan jangan tinggalkan placeholder.
-- Script Python: setelah write_file, jalankan dulu \`python3 -m py_compile <file>\` sebelum menjalankannya. Untuk script interaktif, uji dengan input lewat pipe dan pastikan menangani EOF (try/except EOFError).
+- Script Python: hanya jika pengguna meminta uji/jalankan, setelah write_file jalankan dulu \`python3 -m py_compile <file>\` sebelum menjalankannya. Untuk script interaktif, uji dengan input lewat pipe dan pastikan menangani EOF (try/except EOFError).
 - Jika error, BACA pesan error baris per baris, perbaiki akar masalahnya dengan menulis ulang file utuh lewat write_file, lalu uji ulang. Jangan umumkan hasil ke pengguna sebelum uji terakhir berhasil.
 - File dari sesi lain milik pengguna otomatis tersedia di sandbox (File Manager dipakai bersama semua sesi).
 - Lampiran pengguna berada di folder /home/user/attached_assets. Sebutkan nama, tipe, dan ukuran file sebelum menganalisis. Untuk file besar, lihat bagian yang relevan saja dengan tool shell dan jangan menampilkan seluruh isi.
@@ -1300,10 +1300,10 @@ export const Route = createFileRoute("/api/chat")({
                   }
                 } else if (part.type === "reasoning-delta") {
                   // Isi pikiran model tidak dikirim ke layar; cukup status singkat.
-                  if (ckpt.state === "UNDERSTANDING" && !sentUnderstanding) {
+                  if (needsThink && ckpt.state === "UNDERSTANDING" && !sentUnderstanding) {
                     sentUnderstanding = true;
                     setState("UNDERSTANDING");
-                  } else if (Date.now() - lastThinkBeat > 3000) {
+                  } else if (needsThink && ["UNDERSTANDING", "PLANNING"].includes(ckpt.state) && Date.now() - lastThinkBeat > 3000) {
                     lastThinkBeat = Date.now();
                     emit({ t: "status", state: ckpt.state, label: "Berpikir", detail: "Berpikir" });
                   }
@@ -1328,7 +1328,8 @@ export const Route = createFileRoute("/api/chat")({
                 } else if (part.type === "tool-input-start") {
                   resetStep();
                   inputName.set(part.id, part.toolName);
-                  if (part.toolName === "write_file" || part.toolName === "edit_file") setState("EXECUTING", "Menyiapkan file");
+                  const earlyLabels: Record<string, string> = { write_file: "Menyiapkan file", edit_file: "Menyiapkan perubahan file", run_command: "Menyiapkan perintah", read_file: "Membaca file", list_files: "Melihat struktur file", search_code: "Mencari kode", preview_app: "Menyiapkan pratinjau" };
+                  if (earlyLabels[part.toolName]) setState("EXECUTING", earlyLabels[part.toolName]);
                   emit({ t: "tool", id: part.id, name: part.toolName, input: {}, at: Date.now() });
                 } else if (part.type === "tool-call") {
                   if (part.toolName === "request_secret") calledSecret = true;
