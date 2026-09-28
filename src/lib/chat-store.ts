@@ -612,6 +612,7 @@ async function runTurn({
         taskId: assistantId.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 80),
         sandboxId: getSession(sessionId)?.sandboxId ?? null,
         mode: getSession(sessionId)?.mode ?? "prime",
+        aiModel: localStorage.getItem("wengpt:ai-model") === "coder" ? "coder" : "prime",
         files: loadAllFiles()
           .filter((file) => !file.failed && !file.attachmentId && !file.truncated)
           .slice(0, 40)
