@@ -20,7 +20,16 @@
   --secondary: oklch(.2 .027 24); --secondary-foreground: oklch(.94 .008 25); --muted: oklch(.205 .022 24); --muted-foreground: oklch(.71 .012 25);
   --accent: oklch(.245 .047 24); --accent-foreground: oklch(.98 .006 25); --destructive: oklch(.68 .22 25); --destructive-foreground: oklch(.98 .006 25);
   --border: oklch(.3 .055 24); --input: oklch(.27 .048 24); --ring: oklch(.62 .245 26); --success: oklch(.72 .16 150); --warning: oklch(.82 .16 88);
-  --grid: oklch(.49 .13 25 / .13); --brand-line: oklch(.58 .19 26 / .45);
+  --grid: oklch(.49 .13 25 / .13); --brand-line: oklch(.58 .19 26 / .45); --grid-wash: oklch(.27 .07 25 / .18); --mark-glow: oklch(.61 .215 25 / .7);
+}
+.chat-shell[data-mode="webh"] {
+  --background: oklch(.105 .015 165); --foreground: oklch(.96 .012 155); --card: oklch(.155 .024 162); --card-foreground: oklch(.96 .012 155);
+  --popover: oklch(.16 .025 162); --popover-foreground: oklch(.96 .012 155); --primary: oklch(.75 .19 150); --primary-foreground: oklch(.12 .025 165);
+  --secondary: oklch(.21 .03 162); --secondary-foreground: oklch(.94 .015 155); --muted: oklch(.21 .028 162); --muted-foreground: oklch(.73 .022 156);
+  --accent: oklch(.26 .06 153); --accent-foreground: oklch(.96 .012 155); --destructive: oklch(.68 .21 25); --destructive-foreground: oklch(.98 .006 25);
+  --border: oklch(.36 .072 154); --input: oklch(.31 .052 155); --ring: oklch(.75 .19 150);
+  --grid: oklch(.72 .16 151 / .085); --grid-wash: oklch(.41 .09 154 / .08); --brand-line: oklch(.66 .16 150 / .48); --mark-glow: oklch(.72 .18 150 / .65);
+  color-scheme: dark;
 }
 @layer base {
   * { border-color: var(--color-border); }
@@ -35,7 +44,7 @@
   @media (hover: none) { button:hover, a:hover, [role="button"]:hover { background-color: initial; } }
   ::-webkit-scrollbar { width: 8px; height: 8px; } ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; } ::-webkit-scrollbar-track { background: transparent; }
 }
-@utility brand-mark { display: grid; place-items: center; flex-shrink: 0; border: 1px solid var(--brand-line); border-radius: .4rem; color: var(--primary); background: color-mix(in oklab, var(--card) 90%, transparent); box-shadow: 0 10px 28px -18px oklch(.61 .215 25 / .7); }
+@utility brand-mark { display: grid; place-items: center; flex-shrink: 0; border: 1px solid var(--brand-line); border-radius: .4rem; color: var(--primary); background: color-mix(in oklab, var(--card) 90%, transparent); box-shadow: 0 10px 28px -18px var(--mark-glow); }
 
 /* Kotak hadir dahulu, lalu simbol muncul dengan kilau singkat; tidak berputar tanpa henti. */
 @keyframes wengpt-mark-reveal {
@@ -48,16 +57,38 @@
   75% { opacity: 1; transform: scale(1.1) rotate(4deg); filter: blur(0); }
   100% { opacity: 1; transform: scale(1) rotate(0); filter: blur(0); }
 }
-.brand-mark { animation: wengpt-mark-reveal .75s cubic-bezier(.2,.8,.2,1) both; }
-.brand-mark > svg { animation: wengpt-symbol-reveal .95s cubic-bezier(.2,.8,.2,1) both; }
+.brand-mark { animation: wengpt-mark-cycle 8s ease-in-out infinite; }
+.brand-mark > svg { animation: wengpt-symbol-cycle 8s ease-in-out infinite; }
+@keyframes wengpt-mark-cycle {
+  0% { opacity: 0; transform: scale(.72) rotate(-8deg); }
+  9%, 84% { opacity: 1; transform: scale(1) rotate(0); }
+  91% { opacity: .75; transform: scale(.94); }
+  100% { opacity: 0; transform: scale(.72) rotate(-8deg); }
+}
+@keyframes wengpt-symbol-cycle {
+  0%, 3% { opacity: 0; transform: scale(.5) rotate(-30deg); }
+  13%, 85% { opacity: 1; transform: scale(1) rotate(0); }
+  91% { opacity: .4; transform: scale(.85); }
+  100% { opacity: 0; transform: scale(.5) rotate(-30deg); }
+}
 @media (prefers-reduced-motion: reduce) {
   .brand-mark, .brand-mark > svg { animation: none; }
 }
 @utility cyber-grid {
-  background-image: linear-gradient(to right, var(--grid) 1px, transparent 1px), linear-gradient(to bottom, var(--grid) 1px, transparent 1px), linear-gradient(to bottom, oklch(.27 .07 25 / .18), transparent 65%);
+  background-image: linear-gradient(to right, var(--grid) 1px, transparent 1px), linear-gradient(to bottom, var(--grid) 1px, transparent 1px), linear-gradient(to bottom, var(--grid-wash), transparent 65%);
   background-size: 70px 70px, 70px 70px, 100% 100%;
   background-position: center top;
 }
+.chat-shell[data-mode="webh"]::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  background-image: linear-gradient(90deg, transparent 0 48%, var(--grid) 49% 51%, transparent 52%), linear-gradient(0deg, transparent 0 48%, var(--grid) 49% 51%, transparent 52%);
+  background-size: 96px 96px; opacity: .2;
+  animation: matrix-grid-drift 36s linear infinite;
+  mask-image: linear-gradient(to bottom, transparent, black 15%, black 85%, transparent);
+}
+.chat-shell[data-mode="webh"] > * { position: relative; }
+@keyframes matrix-grid-drift { to { transform: translate3d(-96px, 96px, 0); } }
+@media (prefers-reduced-motion: reduce) { .chat-shell[data-mode="webh"]::before { animation: none; } }
 @utility wengpt-markdown {
   overflow-wrap: anywhere; word-break: normal;
   & > * + * { margin-top: .85rem; }

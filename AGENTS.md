@@ -28,4 +28,5 @@
 - Classify timeline visibility from actual coding/work tools, milestones, or file changes; ordinary chat and simple web lookups must not create a visible work timeline.
 - Supply the current Makassar date and use Firecrawl as the sole web-search source; preserve Firecrawl ranking, retry brief rate limits once, and surface provider failures instead of reporting false empty results.
 - WenGPT system instructions live in root `AGENT.md`, imported raw into the chat server, so behavior is edited as a document not code.
+- Keep WEBH detection in a shared pure classifier and persist mode per chat session; this keeps server instructions and client theme in sync without making WEBH the default.
 - Ship to GitHub with the Git data API (blobs → tree → commit → ref on Kztutorial99/WenGPT main), never plain `git push`, because the sandbox blocks stateful git; then confirm the Vercel project build reaches READY.

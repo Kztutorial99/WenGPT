@@ -216,6 +216,7 @@ function Chat() {
   return (
     <main
       style={box}
+      data-mode={session?.mode ?? "prime"}
       className="chat-shell cyber-grid fixed inset-x-0 top-0 flex h-dvh min-w-0 flex-col overflow-hidden bg-background text-foreground"
     >
       <header className="z-20 mx-2 mt-2 flex shrink-0 flex-col overflow-hidden rounded-2xl border border-brand-line bg-card/95 backdrop-blur-xl sm:mx-5 sm:mt-4 sm:flex-row sm:items-center sm:justify-between sm:px-4 sm:py-2">
@@ -225,7 +226,7 @@ function Chat() {
           </span>
           <h1 className="flex min-w-0 items-center gap-2 text-sm font-semibold sm:text-base">
             <span>WenGPT</span>
-            <span className="rounded-md border border-brand-line px-2 py-0.5 text-primary">Prime</span>
+            <span className="rounded-md border border-brand-line px-2 py-0.5 text-primary">{session?.mode === "webh" ? "WEBH" : "Prime"}</span>
           </h1>
           <ConnectionStatus />
         </div>
@@ -252,7 +253,7 @@ function Chat() {
               <span className="brand-mark mb-5 size-12">
                 <WenGptMark className="size-5" />
               </span>
-              <h2 className="text-balance text-2xl font-semibold sm:text-3xl">WenGPT <span className="text-primary">Prime</span></h2>
+              <h2 className="text-balance text-2xl font-semibold sm:text-3xl">WenGPT <span className="text-primary">{session?.mode === "webh" ? "WEBH" : "Prime"}</span></h2>
               <p className="mt-2 max-w-md text-pretty text-sm leading-6 text-muted-foreground">
                 Mau mengerjakan apa hari ini?
               </p>
@@ -322,7 +323,7 @@ function Chat() {
                     <span className="brand-mark size-6 rounded-sm">
                       <WenGptMark className="size-4" />
                     </span>
-                    WenGPT Prime
+                    WenGPT {session?.mode === "webh" ? "WEBH" : "Prime"}
                     {active && message.agent?.label === "Berpikir" && !work && (
                       <span className="ml-1 rounded-full border border-border/70 px-2 py-0.5 text-[10px] font-normal text-muted-foreground">Berpikir</span>
                     )}
@@ -491,7 +492,7 @@ function Chat() {
           <PromptInputTextarea
             value={input}
             onChange={(event) => setInput(event.currentTarget.value)}
-            placeholder="Tulis pesan untuk WenGPT Prime…"
+            placeholder={`Tulis pesan untuk WenGPT ${session?.mode === "webh" ? "WEBH" : "Prime"}…`}
             className="min-h-12 max-h-40 min-w-0 px-4 pt-3 pb-1 text-base leading-6 sm:text-sm"
           />
           <PromptInputFooter className="min-h-10 px-2 pb-2">

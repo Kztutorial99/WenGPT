@@ -1,4 +1,5 @@
 import { loadSecrets, secretPayload } from "./secret-store";
+import { isWebhRequest } from "./webh-mode";
 export type ToolOut = {
   exitCode?: number;
   stdout?: string;
@@ -76,6 +77,7 @@ export type ChatSession = {
   createdAt: number;
   updatedAt: number;
   sandboxId: string | null;
+  mode?: "webh" | "prime";
   messages: MessageData[];
 };
 export type TimelineEntry =
@@ -817,6 +819,7 @@ export async function sendMessage(
   if ((!prompt && !incoming.length) || !session || isStreaming(sessionId)) return;
   const visiblePrompt =
     prompt || `Analisis ${incoming.length === 1 ? "file ini" : "file-file ini"}.`;
+  const mode = isWebhRequest(visiblePrompt) ? "webh" : "prime";
   const now = Date.now();
   const user: MessageData = {
     id: crypto.randomUUID(),
@@ -842,6 +845,7 @@ export async function sendMessage(
   // Tampilkan pesan & indikator seketika, baru siapkan lampiran/secret di belakang.
   patchSession(sessionId, (current) => ({
     ...current,
+    mode,
     title: current.messages.length ? current.title : titleFrom([user]),
     updatedAt: now,
     messages: [...history, assistant],

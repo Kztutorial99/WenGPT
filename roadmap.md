@@ -1,5 +1,7 @@
 # Roadmap
 
+- [x] Animasi ikon WenGPT berulang dengan jeda; WEBH mengaktifkan tema hijau dan kisi bergerak ringan; tingkatkan kejelasan tema, uji dan sinkronkan GitHub
+
 - [x] Rapikan format jawaban "Info lengkap" menjadi profil berbagian dan daftar mudah dibaca
 - [x] Terapkan tema kisi hitam-merah dari referensi dan garis kotak halus untuk Prime; cek tampilan ponsel/desktop dan push ke GitHub
 - [x] Satukan proses berpikir dan eksekusi dalam Linimasa; chat hanya menampilkan pintasan ringkas dan hasil setelah selesai

@@ -4,12 +4,14 @@ import { streamText, convertToModelMessages, tool, stepCountIs, type UIMessage }
 import { z } from "zod";
 import { Sandbox } from "e2b";
 import { verifySecret } from "@/lib/secret-test.server";
+import { isWebhRequest } from "@/lib/webh-mode";
 
 import AGENT_INSTRUCTIONS from "../../../AGENT.md?raw";
 import WEBH_INSTRUCTIONS from "../../../WEBH.md?raw";
 
 const stripComments = (s: string) => s.replace(/^<!--[\s\S]*?-->\s*/, "").trim();
-const SYSTEM_PROMPT = `${stripComments(AGENT_INSTRUCTIONS)}\n\n${stripComments(WEBH_INSTRUCTIONS)}`;
+const PRIME_PROMPT = stripComments(AGENT_INSTRUCTIONS);
+const WEBH_PROMPT = stripComments(WEBH_INSTRUCTIONS);
 
 
 // Model kadang menulis pemanggilan tool sebagai teks biasa. Saring sebelum dikirim ke layar.
@@ -1035,10 +1037,13 @@ export const Route = createFileRoute("/api/chat")({
         };
 
         // Mode berpikir adaptif: hanya aktif untuk permintaan yang memang butuh penalaran.
-        const lastUser = [...body.messages].reverse().find((m) => m.role === "user");
+        const lastUser = [...body.messages].reverse().find((m) => m.role === "user" &&
+          !String((m.parts as { type: string; text?: string }[] | undefined)?.find((p) => p.type === "text")?.text ?? "").startsWith("Jawaban sebelumnya dihentikan pengguna"));
         const lastText = String(
           (lastUser?.parts as { type: string; text?: string }[] | undefined)?.find((p) => p.type === "text")?.text ?? "",
         );
+        // Both the instructions and the client palette use the same classifier.
+        const webhMode = isWebhRequest(lastText);
         // Cepat: pikir dalam hanya untuk analisis/debug; buat script/chat biasa pakai effort rendah.
         const needsThink =
           lastText.length > 400 ||
@@ -1082,7 +1087,7 @@ export const Route = createFileRoute("/api/chat")({
 
         const result = streamText({
           model: provider.chatModel(model),
-           system: `${SYSTEM_PROMPT}${resumed ? `\n\n[CHECKPOINT TUGAS ${taskId} - LANJUTKAN, JANGAN ULANG DARI AWAL]\nStatus terakhir: ${ckpt.state}. Operasi terakhir yang berhasil: ${ckpt.lastOp ?? "-"}.\nTahap: ${ckpt.milestones.map((m) => `${m.title}=${m.status}`).join(", ") || "-"}.\nFile yang sudah diubah: ${[...new Set(ckpt.files.map((f) => f.path))].join(", ") || "-"}.\nTes terakhir: ${ckpt.lastTest ? `${ckpt.lastTest.command} (exit ${ckpt.lastTest.exitCode})` : "-"}.\nError terakhir: ${ckpt.lastError ? ckpt.lastError.message.slice(0, 500) : "-"}.\nOperasi yang sudah berhasil tidak perlu diulang (server juga akan melewatinya). Lanjutkan dari operasi berikutnya yang belum berhasil. Tahap yang masih running/pending wajib ditutup dengan alat milestone sebelum jawaban akhir. File yang sudah dibuat tetap ada; baca ulang dengan read_file sebelum mengedit.` : ""}\n\nTanggal saat ini (waktu Makassar, UTC+8): ${today}. Untuk permintaan info terbaru, cari dengan tahun berjalan dan cek tanggal sumber sebelum menjawab.`,
+            system: `${PRIME_PROMPT}${webhMode ? `\n\n${WEBH_PROMPT}` : ""}${resumed ? `\n\n[CHECKPOINT TUGAS ${taskId} - LANJUTKAN, JANGAN ULANG DARI AWAL]\nStatus terakhir: ${ckpt.state}. Operasi terakhir yang berhasil: ${ckpt.lastOp ?? "-"}.\nTahap: ${ckpt.milestones.map((m) => `${m.title}=${m.status}`).join(", ") || "-"}.\nFile yang sudah diubah: ${[...new Set(ckpt.files.map((f) => f.path))].join(", ") || "-"}.\nTes terakhir: ${ckpt.lastTest ? `${ckpt.lastTest.command} (exit ${ckpt.lastTest.exitCode})` : "-"}.\nError terakhir: ${ckpt.lastError ? ckpt.lastError.message.slice(0, 500) : "-"}.\nOperasi yang sudah berhasil tidak perlu diulang (server juga akan melewatinya). Lanjutkan dari operasi berikutnya yang belum berhasil. Tahap yang masih running/pending wajib ditutup dengan alat milestone sebelum jawaban akhir. File yang sudah dibuat tetap ada; baca ulang dengan read_file sebelum mengedit.` : ""}\n\nTanggal saat ini (waktu Makassar, UTC+8): ${today}. Untuk permintaan info terbaru, cari dengan tahun berjalan dan cek tanggal sumber sebelum menjawab.`,
           messages: modelMessages,
           tools,
           stopWhen: stepCountIs(50),
