@@ -1339,6 +1339,12 @@ export const Route = createFileRoute("/api/chat")({
               if (streamFailed || request.signal.aborted) reasons.push("Proses terhenti sebelum selesai.");
               if (commandRunning > 0) reasons.push("Masih ada perintah yang berjalan.");
               if (unresolvedError) reasons.push(ckpt.lastError?.locations[0] ? `Error belum teratasi di ${ckpt.lastError.locations[0].file}:${ckpt.lastError.locations[0].line}.` : "Masih ada error yang belum teratasi.");
+              const verified = ckpt.lastTest?.exitCode === 0 && !unresolvedError;
+              if (verified && ckpt.files.length > 0) {
+                for (const id of ["setup", "implement"])
+                  if (ckpt.milestones.find((m) => m.id === id && (m.status === "running" || m.status === "pending")))
+                    setMs(id, "done");
+              }
               const open = ckpt.milestones.filter((m) => m.status === "running" || m.status === "pending");
               const bad = ckpt.milestones.filter((m) => m.status === "failed" || m.status === "attention");
               if (open.length && intent !== "need_clarification") reasons.push(`Tahap belum selesai: ${open.map((m) => m.title).join(", ")}.`);
