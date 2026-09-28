@@ -12,7 +12,6 @@ jobs:
       - run: bun install
       - run: bun run build
         env:
-          NITRO_PRESET: cloudflare-module
       - name: Deploy
         run: bunx wrangler@4 deploy --config wrangler.jsonc
         env:
