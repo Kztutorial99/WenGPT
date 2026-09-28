@@ -94,6 +94,6 @@ def check(acc_id, user, key):
         print("  -> sesi hidup tapi AI mati, nyalakan ulang"); restart(acc_id, user, key)
 
 
-for i in ("1", "2", "3"):
+for i in ("1",):
     u, k = os.environ.get(f"KAGGLE_USERNAME_{i}"), os.environ.get(f"KAGGLE_KEY_{i}")
     if u and k: check(i, u, k)
