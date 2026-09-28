@@ -59,6 +59,8 @@ export type AgentState = {
   done?: { ok: boolean; state: string; reasons: string[] } | undefined;
   lastEventAt?: number | undefined;
   lastBeat?: number | undefined;
+  startedAt?: number | undefined;
+  endedAt?: number | undefined;
 };
 export type MessageData = {
   id: string;
@@ -599,10 +601,11 @@ async function runTurn({
           const seq = Number(event["seq"]);
           if (event.t === "done") sawDone = true;
           patchAgent(sessionId, assistantId, (agent) => {
-            const next: AgentState = { ...agent, lastSeq: seq, lastBeat: Date.now(), ...(event.t !== "hb" ? { lastEventAt: Date.now() } : {}) };
+            const next: AgentState = { ...agent, startedAt: agent.startedAt ?? Date.now(), lastSeq: seq, lastBeat: Date.now(), ...(event.t !== "hb" ? { lastEventAt: Date.now() } : {}) };
             if (event.t === "task") {
               next.taskId = String(event["taskId"]);
               next.done = undefined;
+              next.endedAt = undefined;
               if (next.state === "DISCONNECTED") next.state = "EXECUTING";
             } else if (event.t === "status") {
               next.state = String(event["state"]);
@@ -635,6 +638,7 @@ async function runTurn({
               next.done = { ok: !!event["ok"], state: String(event["state"]), reasons: (event["reasons"] as string[]) ?? [] };
               next.state = next.done.state;
               next.detail = undefined;
+              next.endedAt = Date.now();
               if (["COMPLETED", "FAILED", "ATTENTION"].includes(next.state))
                 next.milestones = next.milestones.map((m) =>
                   m.status === "running" || m.status === "pending" ? { ...m, status: next.done!.ok ? "done" : "attention" } : m,
@@ -708,10 +712,10 @@ async function runTurn({
       }
     }
     if (!sawDone && !controller.signal.aborted)
-      patchAgent(sessionId, assistantId, (agent) => ({ ...agent, state: "DISCONNECTED", label: "Koneksi terputus — pekerjaan tetap tersimpan" }));
+      patchAgent(sessionId, assistantId, (agent) => ({ ...agent, state: "DISCONNECTED", endedAt: Date.now(), label: "Koneksi terputus — pekerjaan tetap tersimpan" }));
   } catch (error) {
     if (!controller.signal.aborted && (error as Error).name !== "AbortError") {
-      patchAgent(sessionId, assistantId, (agent) => ({ ...agent, state: "DISCONNECTED", label: humanError((error as Error).message) }));
+      patchAgent(sessionId, assistantId, (agent) => ({ ...agent, state: "DISCONNECTED", endedAt: Date.now(), label: humanError((error as Error).message) }));
     }
   } finally {
     if (controllers.get(sessionId) === controller) controllers.delete(sessionId);
@@ -988,6 +992,21 @@ export function createFolder(dir: string, folderName: string) {
   if (folderExists(path)) throw new Error(`Folder “${wanted}” sudah ada.`);
   addFolders([path]);
   return path;
+}
+/** Simpan hasil edit dari File Manager (versi terbaru menggantikan versi lama di path yang sama). */
+export function saveFileContent(path: string, content: string) {
+  const existing = state.attachments.find((f) => f.path === path && f.runId === "manual");
+  const file: SavedFile = {
+    ...(existing ?? { path, runId: "manual", ask: "Diedit di File Manager", failed: false, mediaType: "text/plain", key: crypto.randomUUID() }),
+    content,
+    truncated: false,
+    size: content.length,
+    updatedAt: Date.now(),
+  } as SavedFile;
+  state = { ...state, attachments: [file, ...state.attachments.filter((f) => f !== existing)] };
+  save();
+  emit();
+  return file;
 }
 export function createTextFile(dir: string, fileName: string, content = "") {
   const wanted = fileName.trim();

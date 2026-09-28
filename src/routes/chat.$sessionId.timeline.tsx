@@ -7,7 +7,6 @@ import {
   ChevronRight,
   CircleAlert,
   Clock3,
-  FileText,
   FolderOpen as Files,
   GitBranch,
   Brain,
@@ -343,8 +342,8 @@ function RunItem({ run, number, sessionId, live }: { run: ToolRun; number: numbe
       />
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
         <span className="font-mono">{number}.</span>
-        {command ? <Terminal className="size-3.5" /> : <FileText className="size-3.5" />}
-        <span>{command ? "Terminal" : itemLabel ?? (download ? `Unduh ${kindLabel}` : `Simpan ${kindLabel}`)}</span>
+        {command && <Terminal className="size-3.5" />}
+        <span>{command ? "Terminal" : itemLabel ?? (download ? `Unduh ${kindLabel}` : `Tulis ${kindLabel}`)}</span>
         <span>·</span>
         <span className={failed || stopped ? "text-destructive" : output ? "text-success" : "text-warning"}>
           {stopped ? "Terhenti" : !output ? <>Berjalan<span className="inline-block w-4 animate-pulse">...</span></> : failed ? "Gagal" : "Selesai"}
@@ -366,22 +365,16 @@ function RunItem({ run, number, sessionId, live }: { run: ToolRun; number: numbe
           )}
         </>
       ) : (
-        <Link
-          to="/chat/$sessionId/files"
-          params={{ sessionId }}
-          hash={download ? (fileNames[0] ?? "") : input}
-          className="mt-2 flex min-w-0 items-center gap-2 rounded-md border border-border/65 bg-background/60 px-3 py-2.5 active:bg-muted"
-        >
-          <FileText className="size-4 shrink-0 text-primary" />
-          <span className="min-w-0 flex-1 truncate font-mono text-xs">{input}</span>
-          {!output && live ? (
-            <span className="size-2 animate-pulse rounded-full bg-primary" />
-          ) : failed || stopped ? (
-            <CircleAlert className="size-4 text-destructive" />
-          ) : (
-            <Check className="size-4 text-success" />
-          )}
-        </Link>
+        <p className="mt-1.5 min-w-0 truncate text-xs text-foreground/85">
+          {(() => {
+            const name = download ? (fileNames.join(", ") || input) : (input.split("/").pop() || input);
+            if (!input || input === "Menyiapkan file…") return live && !output ? "Menyiapkan file…" : "File disiapkan";
+            const doing = !output && live;
+            const verb = download ? (doing ? "Mengunduh" : "Diunduh:") : readF ? (doing ? "Membaca" : "Dibaca:") : editF ? (doing ? "Mengubah" : "Diubah:") : listF ? (doing ? "Melihat" : "Dilihat:") : searchC ? (doing ? "Mencari" : "Dicari:") : preview ? (doing ? "Menyiapkan pratinjau" : "Pratinjau:") : todoT ? "" : (doing ? "Menulis" : "Disimpan:");
+            return `${verb} ${name}`.trim();
+          })()}
+          {(failed || stopped) && <span className="ml-1 text-destructive">· gagal</span>}
+        </p>
       )}
     </li>
   );

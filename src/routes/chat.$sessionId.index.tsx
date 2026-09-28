@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Globe, ChevronRight, FileText, GitBranch, Image as ImageIcon, Paperclip, Plus, RotateCcw, Video, X } from "lucide-react";
 import { WenGptMark } from "@/components/wen-gpt-mark";
 import { AppNav } from "@/components/app-nav";
@@ -282,8 +282,37 @@ function Chat() {
                 .flatMap((part) => (part.type === "tool" && part.run.name === "web_search" ? (part.run.output?.results ?? []) : []))
                 .filter((r, i, all) => all.findIndex((x) => x.url === r.url) === i)
                 .slice(0, 6);
+              const tailPart = message.parts[message.parts.length - 1];
+              const answering = active && tailPart?.type === "text" && tailPart.text.trim().length > 0 && lastToolIndex >= 0;
+              const firstText = message.parts[0]?.type === "text" && message.parts[0].text.trim() && lastToolIndex > 0 ? 0 : -1;
               const progress = message.agent?.label ??
                 (message.agent?.state === "TESTING" ? "Menguji aplikasi" : "Mengerjakan project");
+              const workCard = (
+                <>
+                  {checkpoint && work && (
+                    <Button asChild variant="outline" className="mb-2 h-auto w-full justify-start gap-2 rounded-md border-border/70 bg-card/55 px-3 py-2 text-left text-xs font-normal hover:border-primary/45">
+                      <Link to="/chat/$sessionId/timeline" params={{ sessionId }} hash={checkpoint.id}>
+                        <GitBranch className={`size-4 shrink-0 text-primary ${active && !answering ? "animate-pulse" : ""}`} />
+                        <span className="min-w-0 flex-1 truncate">Linimasa · {active && !answering ? progress : `${complete} langkah selesai`}</span>
+                        <span className="shrink-0 text-muted-foreground">{checkpoint.entries.length} aktivitas</span>
+                        {message.agent?.startedAt && (
+                          <WorkDuration start={message.agent.startedAt} end={message.agent.endedAt ?? (active && !answering ? undefined : message.agent.lastEventAt)} />
+                        )}
+                        <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                      </Link>
+                    </Button>
+                  )}
+                  {message.role === "assistant" && message.agent && work && (
+                    <AgentProgress
+                      agent={message.agent}
+                      sessionId={sessionId}
+                      active={active}
+                      answering={answering}
+                      onResume={message.id === last?.id && !streaming ? () => void resumeSession(sessionId) : undefined}
+                    />
+                  )}
+                </>
+              );
               return (
               <Message key={message.id} from={message.role} className="min-w-0 max-w-full">
                 {message.role === "assistant" && (
@@ -301,33 +330,18 @@ function Chat() {
                       : "w-full overflow-visible"
                   }
                 >
-                  {checkpoint && work && (
-                    <Button asChild variant="outline" className="mb-2 h-auto w-full justify-start gap-2 rounded-md border-border/70 bg-card/55 px-3 py-2 text-left text-xs font-normal hover:border-primary/45">
-                      <Link to="/chat/$sessionId/timeline" params={{ sessionId }} hash={checkpoint.id}>
-                        <GitBranch className={`size-4 shrink-0 text-primary ${active ? "animate-pulse" : ""}`} />
-                        <span className="min-w-0 flex-1 truncate">Linimasa · {active ? progress : `${complete} langkah selesai`}</span>
-                        <span className="shrink-0 text-muted-foreground">{checkpoint.entries.length} aktivitas</span>
-                        <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-                      </Link>
-                    </Button>
-                  )}
-                  {message.role === "assistant" && message.agent && work && (
-                    <AgentProgress
-                      agent={message.agent}
-                      sessionId={sessionId}
-                      active={active}
-                      onResume={message.id === last?.id && !streaming ? () => void resumeSession(sessionId) : undefined}
-                    />
-                  )}
+                  {firstText < 0 && workCard}
                   {message.parts.map((part, index) =>
                     part.type === "text" ? (
+                      <Fragment key={`${message.id}-${index}`}>
                       <MessageResponse
-                        key={`${message.id}-${index}`}
                          isAnimating={active && !hasResponse}
                         className="wengpt-markdown min-w-0 max-w-full"
                       >
                         {part.text.replace(/\(Perintah\s*—\s*exit \?\s*\)\s*/g, "")}
                       </MessageResponse>
+                      {index === firstText && workCard}
+                      </Fragment>
                     ) : part.type === "think" || part.type === "tool" ? null : part.type === "cancelled" ? (
                       <div key={`${message.id}-${index}`} className="mt-2 flex flex-wrap items-center gap-2">
                         <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-destructive/40 bg-destructive/10 px-2.5 py-1 text-[11px] font-medium text-destructive">
@@ -476,5 +490,22 @@ function Chat() {
         </DialogContent>
       </Dialog>
     </main>
+  );
+}
+
+/** Durasi kerja Linimasa: berjalan live, lalu berhenti saat selesai. */
+function WorkDuration({ start, end }: { start: number; end?: number | undefined }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (end) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [end]);
+  const sec = Math.max(0, Math.round(((end ?? now) - start) / 1000));
+  const text = sec < 60 ? `${sec} dtk` : `${Math.floor(sec / 60)} mnt ${sec % 60} dtk`;
+  return (
+    <span className="shrink-0 rounded-full border border-border/60 px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-muted-foreground" title="Durasi Linimasa">
+      {text}
+    </span>
   );
 }

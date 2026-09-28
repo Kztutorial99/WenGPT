@@ -12,7 +12,6 @@ import {
   X,
 } from "lucide-react";
 import type { AgentFileChange, AgentMilestone, AgentState } from "@/lib/chat-store";
-import { FileIcon } from "@/components/file-icon";
 import { Button } from "@/components/ui/button";
 
 const MARK: Record<AgentMilestone["status"], { icon: typeof Check; cls: string; label: string }> = {
@@ -55,6 +54,7 @@ const friendlyDetail = (detail: string) => {
     return file ? `Menyiapkan ${file.split("/").pop()}` : "Menyiapkan project";
   if (/\b(cat\s+>|tee|touch|sed\s+-i|cp\s|mv\s)\b/i.test(trimmed))
     return file ? `Mengubah ${file.split("/").pop()}` : "Memperbarui file project";
+  if (/^(Membuat|Mengubah|Menulis|Menguji|Menyiapkan|Memperbarui|Menjalankan|Membaca|Mencari|Memperbaiki|Menyimpan)\b/.test(trimmed)) return trimmed;
   if (trimmed.startsWith("/home/user/")) return `Mengerjakan ${trimmed.split("/").pop()}`;
   if (/\s|&&|\|/.test(trimmed)) return "Menjalankan langkah kerja";
   return trimmed;
@@ -91,18 +91,22 @@ export function AgentProgress({
   agent,
   sessionId,
   active,
+  answering = false,
   onResume,
 }: {
   agent: AgentState;
   sessionId: string;
   active: boolean;
+  answering?: boolean;
   onResume?: (() => void) | undefined;
 }) {
   const [showFiles, setShowFiles] = useState(false);
   const [openDiff, setOpenDiff] = useState<string | null>(null);
   const [, tick] = useState(0);
   const terminal = ["COMPLETED", "FAILED", "ATTENTION"].includes(agent.state) || !!agent.done;
-  const live = active && !terminal && agent.state !== "DISCONNECTED";
+  // Saat AI sudah menulis jawaban hasil, pekerjaan dianggap beres: animasi berhenti.
+  const wrapping = answering && !terminal;
+  const live = active && !terminal && !answering && agent.state !== "DISCONNECTED";
   useEffect(() => {
     if (!live) return;
     const t = setInterval(() => tick((n) => n + 1), 2000);
@@ -117,7 +121,11 @@ export function AgentProgress({
   if (!hasContent && !active) return null;
   const state = agent.state;
   const runningStep = live ? agent.milestones.find((m) => m.status === "running") : undefined;
-  const label = runningStep
+  const label = wrapping
+    ? "Menyiapkan laporan hasil"
+    : live && agent.detail && /^(Membuat|Mengubah|Menulis|Menguji|Menyiapkan|Memperbaiki)/.test(agent.detail)
+    ? agent.detail
+    : runningStep
     ? runningStep.title
     : state === "DISCONNECTED"
       ? (agent.label ?? STATE_LABEL[state])
@@ -135,7 +143,7 @@ export function AgentProgress({
       <div className="flex items-center gap-2">
         {state === "DISCONNECTED" ? (
           <WifiOff className="size-3.5 text-warning" />
-        ) : state === "COMPLETED" ? (
+        ) : state === "COMPLETED" || wrapping ? (
           <Check className="size-3.5 text-success" />
         ) : state === "FAILED" ? (
           <X className="size-3.5 text-destructive" />
@@ -149,14 +157,14 @@ export function AgentProgress({
         <span className="font-medium">{label}</span>
         {stalled && <span className="text-muted-foreground">· masih bekerja…</span>}
       </div>
-      {live && agent.detail && (
+      {live && agent.detail && friendlyDetail(agent.detail) !== label && (
         <p className="mt-0.5 truncate pl-5 text-muted-foreground">{friendlyDetail(agent.detail)}</p>
       )}
 
       {agent.milestones.length > 0 && (
         <ol className="mt-2 space-y-1 pl-1">
           {agent.milestones.map((m) => {
-            const mark = MARK[!live && m.status === "running" ? (terminal && agent.done?.ok ? "done" : "attention") : m.status];
+            const mark = MARK[!live && (m.status === "running" || (wrapping && m.status === "pending")) ? (wrapping || (terminal && agent.done?.ok) ? "done" : "attention") : m.status];
             const Icon = mark.icon;
             return (
               <li key={m.id} className="flex items-start gap-2">
@@ -197,7 +205,6 @@ export function AgentProgress({
                 .map((f) => (
                   <li key={f.opId}>
                     <div className="flex items-center gap-2">
-                      <FileIcon path={f.path} className="size-3.5" />
                       <Link
                         to="/chat/$sessionId/files"
                         params={{ sessionId }}

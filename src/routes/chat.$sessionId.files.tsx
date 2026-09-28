@@ -57,6 +57,7 @@ import {
   removeFolder,
   renameFile,
   renameFolder,
+  saveFileContent,
   syncSandboxFiles,
   type SavedFile,
 } from "@/lib/chat-store";
@@ -434,6 +435,8 @@ function FilesPage() {
   const [line, setLine] = useState<number | undefined>(undefined);
   const [tabs, setTabs] = useState<string[]>([]);
   const [showDiff, setShowDiff] = useState(false);
+  const [draft, setDraft] = useState<string | null>(null);
+  useEffect(() => setDraft(null), [open]);
   const setOpen = (path: string | null) => {
     setOpenRaw(path);
     if (path) setTabs((t) => (t.includes(path) ? t : [...t, path].slice(-8)));
@@ -993,22 +996,37 @@ function FilesPage() {
           )}
           {(() => {
             const fileChanges = changes.filter((c) => c.path === active.path);
-            const isCode = kindOf(active) === "text" && !!active.content;
+            const isText = kindOf(active) === "text";
+            const isCode = isText && !!active.content;
+            const editing = draft !== null;
             return (
               <>
                 <div className="flex items-center gap-2 border-b border-border/60 px-3 py-1 text-[11px] text-muted-foreground">
-                  <span>{fileChanges.length ? "Diedit agent" : "Hanya baca"}</span>
+                  <span>{editing ? (draft !== active.content ? "Mode edit · belum disimpan" : "Mode edit") : fileChanges.length ? "Diedit agent" : "Mode baca"}</span>
+                  {isText && (
+                    <span className="ml-auto flex items-center gap-1.5">
+                      {editing ? (
+                        <>
+                          <button type="button" className="rounded border border-border/70 px-2 py-0.5 hover:text-foreground" onClick={() => setDraft(null)}>Batal</button>
+                          <button type="button" className="rounded bg-primary px-2 py-0.5 font-medium text-primary-foreground" onClick={() => { saveFileContent(active.path, draft); setDraft(null); toast.success("File disimpan"); }}>Simpan</button>
+                        </>
+                      ) : (
+                        <button type="button" className="rounded border border-border/70 px-2 py-0.5 hover:text-foreground" onClick={() => { setShowDiff(false); setDraft(active.content ?? ""); }}>Edit</button>
+                      )}
+                    </span>
+                  )}
                   {fileChanges.length > 0 && (
                     <>
                       <span>· {fileChanges.length} perubahan</span>
-                      <button type="button" className="ml-auto underline" onClick={() => setShowDiff((v) => !v)}>
+                      <button type="button" className="underline" onClick={() => setShowDiff((v) => !v)}>
                         {showDiff ? "Lihat kode" : "Lihat diff"}
                       </button>
                     </>
                   )}
-                  {isCode && !fileChanges.length && <span className="ml-auto">Cari: Ctrl/Cmd+F</span>}
                 </div>
-                {showDiff && fileChanges.length ? (
+                {editing ? (
+                  <CodeView key={`edit-${active.path}`} path={active.path} content={draft} editable onChange={setDraft} className="min-h-0 flex-1" />
+                ) : showDiff && fileChanges.length ? (
                   <div className="min-h-0 flex-1 overflow-auto p-2">
                     {fileChanges.slice().reverse().map((c) => (
                       <pre key={c.opId} className="mb-2 rounded-md border border-border/60 bg-muted/40 p-2 font-mono text-[11px] leading-4">

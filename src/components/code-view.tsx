@@ -10,7 +10,11 @@ export function CodeView({
   content,
   line,
   className = "",
+  editable = false,
+  onChange,
 }: {
+  editable?: boolean;
+  onChange?: (value: string) => void;
   path: string;
   content: string;
   line?: number | undefined;
@@ -74,8 +78,9 @@ export function CodeView({
       <Editor
         ref={ref}
         value={content}
-        readOnly
-        editable={false}
+        readOnly={!editable}
+        editable={editable}
+        onChange={(v) => onChange?.(v)}
         theme="dark"
         extensions={extensions}
         basicSetup={{

@@ -101,16 +101,22 @@ Alur kerja (loop agen):
 6. Laporkan: ringkas apa yang dibuat/diubah, cara menjalankannya, dan yang belum selesai.
 
 [GERBANG PEMAHAMAN & KERJA EFISIEN - WAJIB UNTUK TUGAS CODING]
-- Sebelum alat apa pun yang mengubah proyek (write_file, edit_file, run_command, preview_app), WAJIB panggil set_intent dulu: status "clear" jika permintaan cukup jelas, atau "need_clarification" jika platform/target perangkat, jenis aplikasi, fitur utama, atau bentuk hasil belum jelas DAN perbedaannya mengubah implementasi secara signifikan. Permintaan singkat tidak otomatis jelas.
+- Sebelum alat apa pun yang mengubah proyek (write_file, edit_file, run_command, preview_app), panggil set_intent HANYA jika ada keraguan (permintaan jelas & simpel boleh langsung dikerjakan tanpa set_intent): status "clear" jika permintaan cukup jelas, atau "need_clarification" jika platform/target perangkat, jenis aplikasi, fitur utama, atau bentuk hasil belum jelas DAN perbedaannya mengubah implementasi secara signifikan. Permintaan singkat tidak otomatis jelas.
 - Jika need_clarification: JANGAN buat/edit file, jalankan perintah, install, buat database, jalankan server, atau pratinjau. Ajukan 1-3 pertanyaan terpenting saja lalu berhenti. Contoh: "Buatkan script C++ menu simple" -> "Siap. Targetnya mau dijalankan di Windows, Linux, Android/Termux, atau cross-platform?". Server akan menolak alat pengubah proyek di giliran itu.
 - Kalau info sudah ada di percakapan sebelumnya, jangan tanya ulang; langsung set_intent "clear". Jangan anggap info yang belum diberikan sebagai fakta.
 - Kode wajib sesuai platform target: Android/Termux atau Linux jangan pakai conio.h/windows.h; cross-platform utamakan standar bahasa. Jangan memperbaiki error platform dengan menebak.
 - Tahap kerja: pakai alat milestone untuk 3-6 tahap BESAR berorientasi hasil (mis. "Analisis kebutuhan", "Menyiapkan project", "Implementasi fitur", "Pengujian", "Preview"), bukan per alat. Tandai running saat mulai, done saat terverifikasi, failed/attention kalau gagal. Jangan tandai done kalau verifikasinya gagal. SEBELUM jawaban akhir, WAJIB perbarui semua tahap yang masih running/pending menjadi done (jika terverifikasi) atau failed/attention - tahap yang dibiarkan menggantung membuat tugas tidak dianggap selesai.
 - Efisien: pahami sekali, rencana sekali, lalu kerjakan beberapa operasi yang jelas berturut-turut tanpa berpikir ulang panjang di antara tiap alat. Jangan baca file yang sama berkali-kali tanpa alasan, jangan ulang perintah yang sama tanpa perubahan. Tugas sederhana: pahami -> kerjakan -> tes -> selesai.
 - Proporsional: permintaan simpel (mis. "buat script X") -> langsung tulis inti kodenya dalam 1 file, tanpa todo/milestone/rencana panjang dan tanpa banyak langkah. Pecah jadi banyak tugas HANYA jika pengguna minta project lengkap/kompleks/detail.
+- KECEPATAN (prioritas utama): untuk permintaan jelas & simpel, JANGAN panggil set_intent, todo, atau milestone - langsung write_file. Tiap alat tambahan membuat jawaban lebih lambat. Pakai set_intent hanya bila memang perlu klarifikasi, dan milestone/todo hanya untuk project besar.
+- Balas dulu: sebelum memanggil alat pertama untuk tugas coding, tulis 1 kalimat singkat ke pengguna (mis. "Siap, saya buatkan script menu Python-nya."), baru panggil alat.
+- Buat script = tulis saja: jika pengguna hanya minta DIBUATKAN script/kode, cukup tulis file-nya lalu laporkan. JANGAN compile, jalankan, atau tes kecuali pengguna meminta (kata seperti "uji", "tes", "jalankan", "run", "compile", "pastikan jalan"). Untuk project web/aplikasi yang minta pratinjau, tetap build & cek.
+- Bahasa lintas platform (Python, JavaScript/Node, Go, Rust, Java) tidak perlu tanya platform; langsung kerjakan.
+- Kualitas kode profesional walau simpel: struktur rapi (fungsi terpisah, main guard), nama jelas, validasi input & penanganan error, tampilan terminal yang bersih (judul, pemisah, pesan jelas), tanpa gaya kuno/klasik, tanpa bug, siap jalan. Periksa ulang sintaks di kepala sebelum menulis.
+- Laporan untuk script simpel cukup singkat: nama file, fitur utama (poin), cara menjalankan. Jangan ulang seluruh kode di chat.
 - Jangan pernah menulis nama alat, pemanggilan alat, JSON argumen alat, atau log 'tool ... selesai' di jawaban chat. Alat dipanggil lewat mekanisme alat saja; jawaban chat hanya berisi hasil untuk pengguna.
 - Error: baca error, cari file & baris (mis. main.cpp:42), perbaiki penyebabnya, tes ulang. Dilarang retry buta. Maks 3 percobaan untuk masalah yang sama, lalu jelaskan error sebenarnya, file/baris terkait, dan apa yang sudah dicoba - jangan klaim selesai.
-- Tes sesuai target: CLI = compile -> jalankan -> menu/output tampil -> tes input (pakai printf/echo pipe) -> keluar. Web = build -> server jalan -> curl cek -> baru preview_app. Compile lolos belum tentu selesai.
+- Tes sesuai target (hanya bila pengguna minta uji/jalankan, atau project web yang butuh pratinjau): CLI = compile -> jalankan -> menu/output tampil -> tes input (pakai printf/echo pipe) -> keluar. Web = build -> server jalan -> curl cek -> baru preview_app. Compile lolos belum tentu selesai.
 - Jangan web_search otomatis saat coding; hanya jika diminta atau info eksternal memang diperlukan.
 - Laporan akhir tugas coding wajib lengkap dan tidak terpotong: apa yang dibuat, file utama yang berubah, hasil tes, cara menjalankan, dan masalah yang belum selesai (jika ada).
 
@@ -645,7 +651,9 @@ export const Route = createFileRoute("/api/chat")({
           ops: {}, files: [], lastTest: null, lastError: null, updatedAt: Date.now(),
         };
         let resumed = false;
-        if (body.sandboxId) {
+        // Cepat: sambung ke sandbox hanya saat melanjutkan tugas, bukan di tiap pesan baru.
+        const wantsResume = JSON.stringify(body.messages?.at?.(-1) ?? "").includes("dihentikan pengguna sebelum selesai");
+        if (body.sandboxId && wantsResume) {
           try {
             const sb = await getSandbox();
             if (await sb.files.exists(ckptPath).catch(() => false)) {
@@ -1181,11 +1189,10 @@ export const Route = createFileRoute("/api/chat")({
         const lastText = String(
           (lastUser?.parts as { type: string; text?: string }[] | undefined)?.find((p) => p.type === "text")?.text ?? "",
         );
+        // Cepat: pikir dalam hanya untuk analisis/debug; buat script/chat biasa pakai effort rendah.
         const needsThink =
-          lastText.length > 160 ||
-          /\b(kenapa|mengapa|jelaskan|analisis|analisa|bandingkan|hitung|debug|error|fix|perbaiki|buat(kan)?|script|kode|code|algoritma|rencana|strategi|optimasi|install|jalankan|why|explain|solve|build|plan)\b/i.test(
-            lastText,
-          );
+          lastText.length > 400 ||
+          /\b(kenapa|mengapa|analisis|analisa|bandingkan|debug|error|perbaiki|algoritma|strategi|optimasi|why|solve)\b/i.test(lastText);
         const modelMessages = await convertToModelMessages(body.messages);
         // Lampiran gambar/video dikirim ke model sebagai input visual, bukan hanya disalin ke sandbox.
         const visual: { type: "image"; image: string; mediaType: string }[] = [];
@@ -1279,6 +1286,12 @@ export const Route = createFileRoute("/api/chat")({
                   if (/tool[ _]?request_secret/i.test(rawText)) sawFakeSecret = true;
                   finalText += part.text;
                   pushText(false);
+                  // Jawaban hasil mulai ditulis setelah kerja file: tutup tahap implementasi.
+                  if (ckpt.files.length && commandRunning === 0 && !unresolvedError &&
+                      ckpt.milestones.some((m) => (m.id === "implement" || m.id === "setup") && m.status === "running")) {
+                    for (const id of ["setup", "implement"])
+                      if (ckpt.milestones.find((m) => m.id === id && m.status === "running")) setMs(id, "done");
+                  }
                 } else if (part.type === "reasoning-delta") {
                   // Isi pikiran model tidak dikirim ke layar; cukup status singkat.
                   if (ckpt.state === "UNDERSTANDING" && !sentUnderstanding) {
@@ -1292,6 +1305,10 @@ export const Route = createFileRoute("/api/chat")({
                   emit({ t: "tool", id: part.id, name: part.toolName, input: {}, at: Date.now() });
                 } else if (part.type === "tool-call") {
                   if (part.toolName === "request_secret") calledSecret = true;
+                  if (part.toolName === "write_file" || part.toolName === "edit_file") {
+                    const fp = String((part.input as { path?: string })?.path ?? "").split("/").pop();
+                    if (fp) setState("EXECUTING", `${part.toolName === "edit_file" ? "Mengubah" : "Menulis"} ${fp}`);
+                  }
                   toolStartedAt.set(part.toolCallId, Date.now());
                   emit({
                     t: "tool",
@@ -1344,7 +1361,7 @@ export const Route = createFileRoute("/api/chat")({
               if (commandRunning > 0) reasons.push("Masih ada perintah yang berjalan.");
               if (unresolvedError) reasons.push(ckpt.lastError?.locations[0] ? `Error belum teratasi di ${ckpt.lastError.locations[0].file}:${ckpt.lastError.locations[0].line}.` : "Masih ada error yang belum teratasi.");
               const successfulCommand = Object.values(ckpt.ops).some((op) => op.name === "run_command" && op.ok);
-              if (successfulCommand && !unresolvedError && ckpt.files.length > 0) {
+              if ((successfulCommand || !Object.values(ckpt.ops).some((op) => op.name === "run_command")) && !unresolvedError && ckpt.files.length > 0 && !streamFailed) {
                 for (const id of ["setup", "implement"])
                   if (ckpt.milestones.find((m) => m.id === id && (m.status === "running" || m.status === "pending")))
                     setMs(id, "done");

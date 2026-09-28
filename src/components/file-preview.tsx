@@ -117,6 +117,8 @@ function TextPreview({ file, className }: { file: SavedFile; className: string }
 
   if (loading && !text)
     return <div className={`flex items-center justify-center p-6 text-xs text-muted-foreground ${className}`}>Memuat isi file…</div>;
+  if (text == null && file.content === "" && !file.truncated)
+    return <div className={`flex items-center justify-center p-6 text-center text-xs text-muted-foreground ${className}`}>Isi file kosong.</div>;
   if (text == null)
     return <div className={`flex items-center justify-center p-6 text-center text-xs text-muted-foreground ${className}`}>File ini belum bisa dibaca karena sesi kerjanya sudah berakhir.</div>;
   const lines = text.split("\n");
@@ -124,7 +126,7 @@ function TextPreview({ file, className }: { file: SavedFile; className: string }
   const shown = all || !long ? text : lines.slice(0, PREVIEW_LINES).join("\n");
   return (
     <div className={`flex flex-col overflow-auto ${className}`}>
-      <pre className="px-4 py-3 font-mono text-xs leading-5 whitespace-pre-wrap break-words">{shown || "(file kosong)"}</pre>
+      <pre className="px-4 py-3 font-mono text-xs leading-5 whitespace-pre-wrap break-words">{shown || "Isi file kosong."}</pre>
       {long && (
         <button type="button" onClick={() => setAll((v) => !v)} className="mx-4 mb-3 self-start rounded-md border border-border/70 bg-card px-3 py-1.5 text-xs font-medium hover:border-primary/45">
           {all ? "Tampilkan sebagian" : `Lihat semua (${lines.length} baris)`}
