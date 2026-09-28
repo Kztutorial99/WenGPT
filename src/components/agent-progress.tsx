@@ -116,8 +116,10 @@ export function AgentProgress({
     (agent.done && !agent.done.ok);
   if (!hasContent && !active) return null;
   const state = agent.state;
-  const label =
-    state === "DISCONNECTED"
+  const runningStep = live ? agent.milestones.find((m) => m.status === "running") : undefined;
+  const label = runningStep
+    ? runningStep.title
+    : state === "DISCONNECTED"
       ? (agent.label ?? STATE_LABEL[state])
       : (STATE_LABEL[state] ?? agent.label ?? state);
   const quiet = live && Date.now() - (agent.lastEventAt ?? agent.lastBeat ?? Date.now()) > 6_000;
@@ -139,7 +141,7 @@ export function AgentProgress({
           <X className="size-3.5 text-destructive" />
         ) : state === "ATTENTION" ? (
           <AlertTriangle className="size-3.5 text-warning" />
-        ) : live ? (
+        ) : live && (runningStep || !quiet) ? (
           <Loader2 className="size-3.5 animate-spin text-warning" />
         ) : (
           <Circle className="size-3.5 text-muted-foreground" />

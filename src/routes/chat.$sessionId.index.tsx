@@ -397,11 +397,11 @@ function Chat() {
             )})
           )}
           {streaming && lastAssistant &&
-            !lastAssistant.parts.some((part) => part.type === "text" && part.text.trim().length > 0) &&
-            !isWorkCheckpoint(
-              checkpoints.find((item) => item.messageIds.includes(lastAssistant.id)),
-              lastAssistant.agent,
-            ) && (
+            !(() => {
+              // Titik-titik tampil selama AI bekerja; hilang hanya saat teks jawaban sedang mengalir.
+              const tail = lastAssistant.parts[lastAssistant.parts.length - 1];
+              return tail?.type === "text" && tail.text.trim().length > 0;
+            })() && (
             <div className="flex items-center gap-2.5 text-sm" role="status">
               <AiDots />
             </div>

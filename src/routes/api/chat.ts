@@ -107,6 +107,8 @@ Alur kerja (loop agen):
 - Kode wajib sesuai platform target: Android/Termux atau Linux jangan pakai conio.h/windows.h; cross-platform utamakan standar bahasa. Jangan memperbaiki error platform dengan menebak.
 - Tahap kerja: pakai alat milestone untuk 3-6 tahap BESAR berorientasi hasil (mis. "Analisis kebutuhan", "Menyiapkan project", "Implementasi fitur", "Pengujian", "Preview"), bukan per alat. Tandai running saat mulai, done saat terverifikasi, failed/attention kalau gagal. Jangan tandai done kalau verifikasinya gagal. SEBELUM jawaban akhir, WAJIB perbarui semua tahap yang masih running/pending menjadi done (jika terverifikasi) atau failed/attention - tahap yang dibiarkan menggantung membuat tugas tidak dianggap selesai.
 - Efisien: pahami sekali, rencana sekali, lalu kerjakan beberapa operasi yang jelas berturut-turut tanpa berpikir ulang panjang di antara tiap alat. Jangan baca file yang sama berkali-kali tanpa alasan, jangan ulang perintah yang sama tanpa perubahan. Tugas sederhana: pahami -> kerjakan -> tes -> selesai.
+- Proporsional: permintaan simpel (mis. "buat script X") -> langsung tulis inti kodenya dalam 1 file, tanpa todo/milestone/rencana panjang dan tanpa banyak langkah. Pecah jadi banyak tugas HANYA jika pengguna minta project lengkap/kompleks/detail.
+- Jangan pernah menulis nama alat, pemanggilan alat, JSON argumen alat, atau log 'tool ... selesai' di jawaban chat. Alat dipanggil lewat mekanisme alat saja; jawaban chat hanya berisi hasil untuk pengguna.
 - Error: baca error, cari file & baris (mis. main.cpp:42), perbaiki penyebabnya, tes ulang. Dilarang retry buta. Maks 3 percobaan untuk masalah yang sama, lalu jelaskan error sebenarnya, file/baris terkait, dan apa yang sudah dicoba - jangan klaim selesai.
 - Tes sesuai target: CLI = compile -> jalankan -> menu/output tampil -> tes input (pakai printf/echo pipe) -> keluar. Web = build -> server jalan -> curl cek -> baru preview_app. Compile lolos belum tentu selesai.
 - Jangan web_search otomatis saat coding; hanya jika diminta atau info eksternal memang diperlukan.
@@ -155,13 +157,15 @@ Aturan:
 
 
 // Model kadang menulis pemanggilan tool sebagai teks biasa. Saring sebelum dikirim ke layar.
-const FAKE_TOOL_LINE = /^[ \t>*_`]*tool[ _]?(request_secret|list_secrets|test_secret|run_command|write_file|read_file)\b.*$/gim;
+const TOOL_NAMES = "set_intent|milestone|web_search|read_webpage|run_command|download_file|write_file|read_file|edit_file|list_files|search_code|todo|preview_app|request_secret|list_secrets|test_secret";
+const FAKE_TOOL_LINE = new RegExp(`^[ \\t>*_\`\\-]*(?:tool[ _:]*)?\\(?\`?(?:${TOOL_NAMES})\`?\\)?(?:\\s*[:(\\[{]|\\s+(?:selesai|berjalan|dipanggil|done|called|running)\\b|\\s*$).*$`, "gim");
+const FAKE_TOOL_JSON = new RegExp(`^\\s*\\{\\s*"(?:name|tool|toolName)"\\s*:\\s*"(?:${TOOL_NAMES})"[\\s\\S]*?\\}\\s*$`, "gim");
 function cleanModelText(raw: string, final: boolean) {
   const t = raw;
   const lastNl = t.lastIndexOf("\n");
   let body = final ? t : t.slice(0, lastNl + 1);
   let tail = final ? "" : t.slice(lastNl + 1);
-  body = body.replace(FAKE_TOOL_LINE, "");
+  body = body.replace(FAKE_TOOL_JSON, "").replace(FAKE_TOOL_LINE, "").replace(/\n{3,}/g, "\n\n");
   // Tahan baris terakhir yang mungkin awal dari pola yang disaring.
   if (/^[ \t>*_`]*(t(o(o(l.*)?)?)?|\[(t(h.*)?)?|<(t(h.*)?)?)$/i.test(tail)) tail = "";
   return (body + tail).replace(/^\s+/, "");

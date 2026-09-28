@@ -87,11 +87,49 @@ export function FilePreview({ file, className = "" }: { file: SavedFile; classNa
     );
   }
 
+  return <TextPreview file={file} className={className} />;
+}
+
+const PREVIEW_LINES = 200;
+
+/** Teks: pakai isi tersimpan, atau ambil dari sandbox; tampilkan sebagian dulu, "Lihat semua" untuk lengkap. */
+function TextPreview({ file, className }: { file: SavedFile; className: string }) {
+  const [text, setText] = useState<string | null>(file.content && !file.truncated ? file.content : null);
+  const [loading, setLoading] = useState(false);
+  const [all, setAll] = useState(false);
+
+  useEffect(() => {
+    setAll(false);
+    if (file.content && !file.truncated) return setText(file.content);
+    const fromBlob = file.attachmentId ? loadAttachment(file.attachmentId).then((b) => b?.text() ?? null) : null;
+    const link = sandboxLink(file);
+    const fromSandbox = link ? fetch(link).then((r) => (r.ok ? r.text() : null)) : null;
+    const job = fromBlob ?? fromSandbox;
+    if (!job) return setText(file.content || null);
+    let cancelled = false;
+    setLoading(true);
+    job
+      .then((t) => !cancelled && setText(t ?? (file.content || null)))
+      .catch(() => !cancelled && setText(file.content || null))
+      .finally(() => !cancelled && setLoading(false));
+    return () => { cancelled = true; };
+  }, [file.path, file.attachmentId, file.content, file.truncated]);
+
+  if (loading && !text)
+    return <div className={`flex items-center justify-center p-6 text-xs text-muted-foreground ${className}`}>Memuat isi file…</div>;
+  if (text == null)
+    return <div className={`flex items-center justify-center p-6 text-center text-xs text-muted-foreground ${className}`}>File ini belum bisa dibaca karena sesi kerjanya sudah berakhir.</div>;
+  const lines = text.split("\n");
+  const long = lines.length > PREVIEW_LINES;
+  const shown = all || !long ? text : lines.slice(0, PREVIEW_LINES).join("\n");
   return (
-    <pre className={`overflow-auto px-4 py-3 font-mono text-xs leading-5 whitespace-pre-wrap break-words ${className}`}>
-      {file.content
-        ? `${file.content}${file.truncated ? "\n\n… cuplikan dipotong. Unduh file untuk melihat isi lengkap." : ""}`
-        : "Pratinjau teks tidak tersedia untuk file ini. Unduh untuk membukanya."}
-    </pre>
+    <div className={`flex flex-col overflow-auto ${className}`}>
+      <pre className="px-4 py-3 font-mono text-xs leading-5 whitespace-pre-wrap break-words">{shown || "(file kosong)"}</pre>
+      {long && (
+        <button type="button" onClick={() => setAll((v) => !v)} className="mx-4 mb-3 self-start rounded-md border border-border/70 bg-card px-3 py-1.5 text-xs font-medium hover:border-primary/45">
+          {all ? "Tampilkan sebagian" : `Lihat semua (${lines.length} baris)`}
+        </button>
+      )}
+    </div>
   );
 }
