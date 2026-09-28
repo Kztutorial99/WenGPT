@@ -27,6 +27,6 @@
 - Keep AI reasoning and execution details in per-turn timeline entries, with one compact chat link and completed answer text only, so the conversation remains readable during long runs.
 - Classify timeline visibility from actual coding/work tools, milestones, or file changes; ordinary chat and simple web lookups must not create a visible work timeline.
 - Supply the current Makassar date and use Firecrawl as the sole web-search source; preserve Firecrawl ranking, retry brief rate limits once, and surface provider failures instead of reporting false empty results.
-- WenGPT system instructions live in root `AGENT.md`, imported raw into the chat server, so behavior is edited as a document not code.
+- WenGPT system instructions live in root `AGENT.md` (including the always-known MODE WEBH persona), imported raw into the chat server, so behavior is edited as a document not code.
 - Let WenGPT select Prime/WEBH semantically through the streamed set_theme tool and persist it per session; never infer the theme from client-side keyword matching.
 - Ship to GitHub with the Git data API (blobs → tree → commit → ref on Kztutorial99/WenGPT main), never plain `git push`, because the sandbox blocks stateful git; then confirm the Vercel project build reaches READY.

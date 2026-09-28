@@ -1,93 +1,78 @@
-import { Link } from "@tanstack/react-router";
-import type { ReactNode } from "react";
-import { FolderOpen, GitBranch, MessagesSquare, Settings, SquareTerminal } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { isWorkCheckpoint, loadAllFiles, loadCheckpoints } from "@/lib/chat-store";
+import { Link, useRouterState } from "@tanstack/react-router";
+import type { ComponentType } from "react";
+import { FolderOpen, Home, MessagesSquare, Settings, SquareTerminal } from "lucide-react";
+import { loadAllFiles } from "@/lib/chat-store";
 import { useChatStore } from "@/lib/use-chat-store";
+import { cn } from "@/lib/utils";
 
-function Status({ value, dot }: { value: number; dot?: boolean }) {
+function Badge({ value, dot }: { value: number; dot?: boolean }) {
+  if (dot) {
+    return (
+      <span className="pointer-events-none absolute -right-1 -top-1 size-2 rounded-full bg-primary ring-2 ring-card" />
+    );
+  }
   if (!value) return null;
-  return dot ? (
-    <span className="pointer-events-none absolute right-0.5 top-0.5 size-2 rounded-full bg-primary ring-2 ring-background" />
-  ) : (
-    <span className="pointer-events-none absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] leading-none font-semibold text-primary-foreground tabular-nums">
+  return (
+    <span className="pointer-events-none absolute -right-2 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-none text-primary-foreground tabular-nums">
       {value > 99 ? "99+" : value}
     </span>
   );
 }
-function Item({
-  title,
-  status,
+
+function Tab({
+  to,
+  params,
+  label,
+  icon: Icon,
+  active,
+  count,
   dot,
-  children,
 }: {
-  title: string;
-  status: number;
-  dot?: boolean;
-  children: ReactNode;
+  to: string;
+  params?: Record<string, string>;
+  label: string;
+  icon: ComponentType<{ className?: string }>;
+  active: boolean;
+  count: number;
+  dot: boolean;
 }) {
   return (
-    <span className="relative inline-flex">
-      <Button
-        asChild
-        variant="ghost"
-        size="icon"
-        title={title}
-        aria-label={`${title}${status ? " — ada yang baru" : ""}`}
-      >
-        {children}
-      </Button>
-      <Status value={status} {...(dot === undefined ? {} : { dot })} />
-    </span>
+    <Link
+      // Jalur dihitung dinamis dari daftar tab; cast hanya untuk melewati union rute ketat.
+      to={to as "/"}
+      params={params as never}
+      aria-label={label}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "relative flex min-w-0 flex-1 flex-col items-center gap-1 rounded-lg px-1 py-1.5 text-[10px] font-medium text-muted-foreground transition-colors hover:text-foreground",
+        active && "bg-primary/15 text-primary shadow-[0_0_18px_-6px_var(--mark-glow)]",
+      )}
+    >
+      <span className="relative inline-flex">
+        <Icon className="size-4" />
+        <Badge value={count} dot={dot} />
+      </span>
+      <span className="max-w-full truncate leading-none">{label}</span>
+    </Link>
   );
 }
+
 export function AppNav({ sessionId }: { sessionId: string }) {
   const snapshot = useChatStore();
-  const files =
-    snapshot.ready && loadAllFiles().some((file) => file.updatedAt > snapshot.read.files) ? 1 : 0;
-  const steps =
-    snapshot.ready &&
-    loadCheckpoints(sessionId).some((checkpoint) => {
-      const agent = checkpoint.messageIds
-        .map((id) => snapshot.sessions.find((session) => session.id === sessionId)?.messages.find((message) => message.id === id)?.agent)
-        .filter(Boolean)
-        .at(-1);
-      return isWorkCheckpoint(checkpoint, agent) && checkpoint.runs.some(
-        (run) => (run.finishedAt ?? run.startedAt) > (snapshot.read.timelines[sessionId] ?? 0),
-      );
-    })
-      ? 1
-      : 0;
-  const sessions = snapshot.sessions.filter(
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const filesNew =
+    snapshot.ready && loadAllFiles().some((file) => file.updatedAt > snapshot.read.files);
+  const sessionsNew = snapshot.sessions.filter(
     (session) => session.id !== sessionId && session.updatedAt > snapshot.read.history,
   ).length;
+  const base = `/chat/${sessionId}`;
   return (
-    <nav className="flex shrink-0 items-center gap-1" aria-label="Menu sesi">
-      <Item title="File Manager" status={files} dot>
-        <Link to="/chat/$sessionId/files" params={{ sessionId }}>
-          <FolderOpen className="size-4" />
-        </Link>
-      </Item>
-      <Item title="Terminal" status={0}>
-        <Link to="/chat/$sessionId/terminal" params={{ sessionId }}>
-          <SquareTerminal className="size-4" />
-        </Link>
-      </Item>
-      <Item title="Linimasa" status={steps} dot>
-        <Link to="/chat/$sessionId/timeline" params={{ sessionId }}>
-          <GitBranch className="size-4" />
-        </Link>
-      </Item>
-      <Item title="Riwayat sesi" status={sessions}>
-        <Link to="/history">
-          <MessagesSquare className="size-4" />
-        </Link>
-      </Item>
-      <Item title="Pengaturan" status={0}>
-        <Link to="/settings">
-          <Settings className="size-4" />
-        </Link>
-      </Item>
+    <nav className="flex items-stretch justify-between gap-1 p-1.5" aria-label="Menu sesi">
+      <Tab to="/chat/$sessionId" params={{ sessionId }} label="Beranda" icon={Home} active={pathname === base} count={0} dot={false} />
+      <Tab to="/chat/$sessionId/files" params={{ sessionId }} label="File" icon={FolderOpen} active={pathname.startsWith(`${base}/files`)} count={0} dot={filesNew} />
+      <Tab to="/chat/$sessionId/terminal" params={{ sessionId }} label="Tools" icon={SquareTerminal} active={pathname.startsWith(`${base}/terminal`)} count={0} dot={false} />
+      <Tab to="/history" label="Chat" icon={MessagesSquare} active={pathname.startsWith("/history")} count={sessionsNew} dot={false} />
+      <Tab to="/settings" label="Pengaturan" icon={Settings} active={pathname.startsWith("/settings")} count={0} dot={false} />
     </nav>
   );
 }

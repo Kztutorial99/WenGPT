@@ -46,6 +46,35 @@
 }
 @utility brand-mark { display: grid; place-items: center; flex-shrink: 0; border: 1px solid var(--brand-line); border-radius: .4rem; color: var(--primary); background: color-mix(in oklab, var(--card) 90%, transparent); box-shadow: 0 10px 28px -18px var(--mark-glow); }
 
+/* Panel sudut lancip ala cyberpunk: garis neon gradien + glow lembut mengikuti bentuk. */
+@utility cyber-frame {
+  --cut: 14px;
+  position: relative;
+  padding: 1.5px;
+  background: linear-gradient(150deg, var(--brand-line), color-mix(in oklab, var(--brand-line) 20%, transparent) 38%, color-mix(in oklab, var(--brand-line) 20%, transparent) 62%, var(--brand-line));
+  clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+  filter: drop-shadow(0 0 14px color-mix(in oklab, var(--primary) 16%, transparent));
+}
+@utility cyber-frame-inner {
+  background: color-mix(in oklab, var(--card) 94%, transparent);
+  clip-path: polygon(calc(var(--cut) - 1.5px) 0, 100% 0, 100% calc(100% - var(--cut) + 1.5px), calc(100% - var(--cut) + 1.5px) 100%, 0 100%, 0 calc(var(--cut) - 1.5px));
+}
+/* Kartu pesan AI: sudut lancip ringan dengan garis neon. */
+@utility cyber-card {
+  position: relative;
+  border: 1px solid var(--brand-line);
+  background: color-mix(in oklab, var(--card) 82%, transparent);
+  clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+  padding: .9rem 1rem;
+}
+/* Tombol kotak kecil dengan sudut terpotong (menu, aksi). */
+@utility cyber-chip {
+  border: 1px solid var(--brand-line);
+  background: color-mix(in oklab, var(--card) 80%, transparent);
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  border-radius: 0;
+}
+
 /* Box animates only initially; Inner icon repeats with pauses. */
 @keyframes wengpt-mark-reveal {
   0% { opacity: 0; transform: scale(.8) translateY(6px); }
@@ -72,19 +101,28 @@
   from { background-position: 0 0, 0 0, 0 0; }
   to { background-position: 96px 96px, 96px 96px, 0 0; }
 }
-.chat-shell[data-mode="webh"]::before {
+/* Aliran titik berjalan di semua tema (Prime merah, WEBH hijau lebih kuat). */
+.chat-shell::before {
   content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
-  background-image: 
+  background-image:
     radial-gradient(circle at 1.5px 1.5px, var(--primary) 1.2px, transparent 0),
-    linear-gradient(90deg, transparent 0 48%, var(--grid) 49% 51%, transparent 52%), 
+    linear-gradient(90deg, transparent 0 48%, var(--grid) 49% 51%, transparent 52%),
     linear-gradient(0deg, transparent 0 48%, var(--grid) 49% 51%, transparent 52%);
   background-size: 96px 96px, 96px 96px, 96px 96px;
-  opacity: .18;
-  animation: matrix-grid-flow 25s linear infinite;
+  opacity: .1;
+  animation: matrix-grid-flow 30s linear infinite;
   mask-image: linear-gradient(to bottom, transparent, black 15%, black 85%, transparent);
 }
-.chat-shell[data-mode="webh"] > * { position: relative; }
-@media (prefers-reduced-motion: reduce) { .chat-shell[data-mode="webh"]::before { animation: none; } }
+.chat-shell[data-mode="webh"]::before { opacity: .18; }
+/* Pita cahaya lembut yang bergerak turun di latar. */
+.chat-shell::after {
+  content: ""; position: absolute; inset: -20% 0; pointer-events: none; z-index: 0;
+  background: linear-gradient(to bottom, transparent 42%, color-mix(in oklab, var(--primary) 7%, transparent) 50%, transparent 58%);
+  animation: cyber-scan 9s linear infinite;
+}
+@keyframes cyber-scan { from { transform: translateY(-30%); } to { transform: translateY(30%); } }
+.chat-shell > * { position: relative; }
+@media (prefers-reduced-motion: reduce) { .chat-shell::before, .chat-shell::after { animation: none; } }
 
 @utility wengpt-markdown {
   overflow-wrap: anywhere; word-break: normal;

@@ -54,3 +54,5 @@
 - [x] Coba lagi tidak macet: pengawas koneksi 25 dtk, animasi berhenti saat terputus/dihentikan
 - [x] Indikator koneksi Offline/Menyambungkan/Tersambung di navigasi atas
 - [x] Ubah mode WEBH menjadi pilihan AI, wariskan tema ke semua halaman, perbaiki animasi ikon/latar, uji, push, dan cek deploy
+- [x] Gabungkan WEBH.md ke instruksi utama AGENT.md agar AI selalu tahu persona WEBH tanpa diingatkan
+- [ ] Rombak tampilan cyberpunk sesuai screenshot: rangka sudut lancip, tab menu Beranda/File/Tools/Chat/Pengaturan, hero, kartu pesan beraksi, komposer baru; uji lalu push

@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Fragment, useEffect, useState } from "react";
-import { Globe, ChevronRight, FileText, GitBranch, Image as ImageIcon, Paperclip, Plus, RotateCcw, Video, X } from "lucide-react";
+import { Check, CheckCheck, ChevronRight, CircleUserRound, Code2, Copy, Crown, FileText, GitBranch, Globe, Image as ImageIcon, Maximize2, Menu, Minimize2, MoreVertical, Paperclip, Plus, RotateCcw, SendHorizontal, Sparkles, ThumbsDown, ThumbsUp, Video, X, Zap } from "lucide-react";
 import { WenGptMark } from "@/components/wen-gpt-mark";
 import { AppNav } from "@/components/app-nav";
 import { AiDots, requestedSecrets, SecretSlider } from "@/components/secret-cards";
@@ -24,6 +24,14 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { CyberFrame } from "@/components/cyber-frame";
+import { cn } from "@/lib/utils";
 import {
   createSession,
   loadCheckpoints,
@@ -59,11 +67,64 @@ export const Route = createFileRoute("/chat/$sessionId/")({
   component: Chat,
 });
 const STARTERS = [
-  "Kamu bisa bantu apa saja?",
-  "Install pandas lalu hitung rata-rata 10 angka acak",
-  "Cek versi Python dan Node di sandbox",
-  "Buatkan script Python sederhana",
+  { icon: Sparkles, text: "Kamu bisa bantu apa saja?" },
+  { icon: Zap, text: "Install pandas lalu hitung rata-rata 10 angka acak" },
+  { icon: Code2, text: "Cek versi Python dan Node di sandbox" },
+  { icon: FileText, text: "Buatkan script Python sederhana" },
 ];
+const fmtTime = (ts?: number) =>
+  ts ? new Date(ts).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }).replace(/:/g, ".") : "";
+
+/** Aksi di bawah jawaban AI: salin, suka/tidak, dan menu lainnya. */
+function MessageFeedback({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const [vote, setVote] = useState<"up" | "down" | null>(null);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* abaikan */
+    }
+  };
+  const btn = "size-7 text-muted-foreground hover:text-primary";
+  return (
+    <div className="flex items-center gap-0.5">
+      <Button variant="ghost" size="icon" className={btn} title="Salin jawaban" onClick={() => void copy()}>
+        {copied ? <Check className="size-3.5 text-success" /> : <Copy className="size-3.5" />}
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        className={cn(btn, vote === "up" && "text-primary")}
+        title="Jawaban membantu"
+        onClick={() => setVote(vote === "up" ? null : "up")}
+      >
+        <ThumbsUp className="size-3.5" />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        className={cn(btn, vote === "down" && "text-destructive")}
+        title="Jawaban kurang membantu"
+        onClick={() => setVote(vote === "down" ? null : "down")}
+      >
+        <ThumbsDown className="size-3.5" />
+      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className={btn} title="Lainnya">
+            <MoreVertical className="size-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => void copy()}>Salin teks</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
 function AttachmentHeader() {
   const attachments = usePromptInputAttachments();
   const [previewId, setPreviewId] = useState<string | null>(null);
@@ -167,6 +228,7 @@ function Chat() {
   const snapshot = useChatStore();
   const session = snapshot.sessions.find((item) => item.id === sessionId);
   const [input, setInput] = useState("");
+  const [expanded, setExpanded] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [chatPreview, setChatPreview] = useState<SavedFile | null>(null);
   const [dismissedSecrets, setDismissedSecrets] = useState<Set<string>>(new Set());
@@ -215,58 +277,86 @@ function Chat() {
   };
   return (
     <main
-      style={box}
-      data-mode={session?.mode ?? "prime"}
-      className="chat-shell cyber-grid fixed inset-x-0 top-0 flex h-dvh min-w-0 flex-col overflow-hidden bg-background text-foreground"
+      className="flex min-w-0 flex-1 flex-col overflow-hidden"
     >
-      <header className="z-20 mx-2 mt-2 flex shrink-0 flex-col overflow-hidden rounded-2xl border border-brand-line bg-card/95 backdrop-blur-xl sm:mx-5 sm:mt-4 sm:flex-row sm:items-center sm:justify-between sm:px-4 sm:py-2">
-        <div className="flex min-w-0 items-center justify-center gap-2.5 px-3 py-2.5 sm:justify-start sm:px-0 sm:py-0">
-          <span className="brand-mark size-8">
-            <WenGptMark className="size-4" />
-          </span>
-          <h1 className="flex min-w-0 items-center gap-2 text-sm font-semibold sm:text-base">
-            <span>WenGPT</span>
-            <span className="rounded-md border border-brand-line px-2 py-0.5 text-primary">{session?.mode === "webh" ? "WEBH" : "Prime"}</span>
-          </h1>
-          <ConnectionStatus />
-        </div>
-        <div className="flex items-center justify-center border-t border-border/60 px-1 py-0.5 sm:justify-end sm:border-0 sm:p-0">
+      <header className="z-20 mx-2 mt-2 flex shrink-0 flex-col gap-2 sm:mx-5 sm:mt-4">
+        <CyberFrame>
+          <div className="flex min-w-0 items-center gap-2.5 px-3 py-2.5 sm:px-4">
+            <Button asChild variant="ghost" size="icon" title="Menu" aria-label="Menu" className="cyber-chip size-9 shrink-0 text-muted-foreground hover:text-primary">
+              <Link to="/history">
+                <Menu className="size-4" />
+              </Link>
+            </Button>
+            <span className="brand-mark size-9 shrink-0 rounded-full">
+              <WenGptMark className="size-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h1 className="flex items-center gap-1.5 truncate text-sm font-semibold sm:text-base">
+                WenGPT
+                <span className="flex items-center gap-1 text-primary">
+                  {session?.mode === "webh" ? "WEBH" : "Prime"}
+                  <Crown className="size-3.5 fill-primary text-primary" />
+                </span>
+              </h1>
+              <p className="text-[10px] leading-tight text-muted-foreground">AI Tanpa Batas</p>
+            </div>
+            <ConnectionStatus />
+            <Button asChild variant="ghost" size="icon" title="Pengaturan" aria-label="Pengaturan" className="hidden size-9 shrink-0 rounded-full border border-brand-line text-primary sm:grid">
+              <Link to="/settings">
+                <CircleUserRound className="size-4" />
+              </Link>
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              title="Sesi baru"
+              aria-label="Sesi baru"
+              className="size-9 shrink-0 text-muted-foreground hover:text-primary"
+              onClick={() => {
+                const id = createSession();
+                window.location.assign(`/chat/${id}`);
+              }}
+            >
+              <Plus className="size-4" />
+            </Button>
+          </div>
+        </CyberFrame>
+        <CyberFrame>
           <AppNav sessionId={sessionId} />
-          <Button
-            variant="ghost"
-            size="icon"
-            title="Sesi baru"
-            onClick={() => {
-              const id = createSession();
-              window.location.assign(`/chat/${id}`);
-            }}
-          >
-            <Plus className="size-4" />
-          </Button>
-        </div>
+        </CyberFrame>
       </header>
       <Conversation className="min-h-0 min-w-0">
         <ConversationScrollOnComplete streaming={streaming} />
         <ConversationContent className="mx-auto min-h-full w-full min-w-0 max-w-3xl gap-7 px-3 py-6 sm:px-6 sm:py-8">
           {!session?.messages.length ? (
             <section className="flex min-h-[62dvh] flex-col items-center justify-center text-center">
-              <span className="brand-mark mb-5 size-12">
-                <WenGptMark className="size-5" />
+              <span className="brand-mark mb-6 size-16 rounded-2xl shadow-[0_0_55px_-10px_var(--mark-glow)]">
+                <WenGptMark className="size-7" />
               </span>
-              <h2 className="text-balance text-2xl font-semibold sm:text-3xl">WenGPT <span className="text-primary">{session?.mode === "webh" ? "WEBH" : "Prime"}</span></h2>
+              <h2 className="text-balance text-3xl font-bold sm:text-4xl">
+                WenGPT{" "}
+                <span className="relative inline-block text-primary">
+                  <Crown className="absolute -top-3 left-1/2 size-4 -translate-x-1/2 fill-primary text-primary" />
+                  {session?.mode === "webh" ? "WEBH" : "Prime"}
+                </span>
+              </h2>
               <p className="mt-2 max-w-md text-pretty text-sm leading-6 text-muted-foreground">
                 Mau mengerjakan apa hari ini?
               </p>
-              <div className="mt-8 grid w-full max-w-xl grid-cols-1 gap-2 sm:grid-cols-2">
-                {STARTERS.map((starter) => (
-                  <Button
-                    key={starter}
-                    variant="outline"
-                    onClick={() => submit(starter)}
-                    className="h-auto min-w-0 justify-start whitespace-normal bg-card/45 px-3 py-3 text-left text-sm leading-5"
+              <div className="mt-8 flex w-full max-w-xl flex-col gap-2.5">
+                {STARTERS.map(({ icon: Icon, text }) => (
+                  <button
+                    key={text}
+                    type="button"
+                    onClick={() => submit(text)}
+                    className="group flex w-full items-center gap-3 rounded-xl border border-brand-line/70 bg-card/60 px-3 py-3 text-left text-sm leading-5 transition-colors hover:border-primary/60 hover:bg-card"
                   >
-                    {starter}
-                  </Button>
+                    <span className="grid size-9 shrink-0 place-items-center rounded-lg border border-brand-line/70 bg-background/60 text-primary">
+                      <Icon className="size-4" />
+                    </span>
+                    <span className="min-w-0 flex-1">{text}</span>
+                    <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+                  </button>
                 ))}
               </div>
             </section>
@@ -319,11 +409,15 @@ function Chat() {
               return (
               <Message key={message.id} from={message.role} className="min-w-0 max-w-full">
                 {message.role === "assistant" && (
-                  <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
-                    <span className="brand-mark size-6 rounded-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="brand-mark size-8 rounded-full">
                       <WenGptMark className="size-4" />
                     </span>
-                    WenGPT {session?.mode === "webh" ? "WEBH" : "Prime"}
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-brand-line bg-card/70 px-2.5 py-1 text-[11px] font-semibold">
+                      <Crown className="size-3 fill-primary text-primary" />
+                      WenGPT {session?.mode === "webh" ? "WEBH" : "Prime"}
+                      <ChevronRight className="size-3 text-muted-foreground" />
+                    </span>
                     {active && message.agent?.label === "Berpikir" && !work && (
                       <span className="ml-1 rounded-full border border-border/70 px-2 py-0.5 text-[10px] font-normal text-muted-foreground">Berpikir</span>
                     )}
@@ -333,7 +427,7 @@ function Chat() {
                   className={
                     message.role === "user"
                       ? "max-w-[88%] overflow-visible rounded-2xl rounded-tr-sm bg-primary px-4 py-3 text-primary-foreground shadow-user sm:max-w-[75%]"
-                      : "w-full overflow-visible"
+                      : "cyber-card w-full overflow-visible"
                   }
                 >
                   {firstText < 0 && workCard}
@@ -429,6 +523,23 @@ function Chat() {
                       </div>
                     )}
                   {!active && sources.length > 0 && <WebSources sources={sources} />}
+                  {message.role === "user" && (
+                    <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-primary-foreground/80">
+                      {fmtTime(message.createdAt)}
+                      <CheckCheck className="size-3" />
+                    </div>
+                  )}
+                  {message.role === "assistant" && hasResponse && !active && (
+                    <div className="mt-2 flex items-center justify-between gap-2 border-t border-border/50 pt-2">
+                      <span className="text-[10px] text-muted-foreground">{fmtTime(message.createdAt)}</span>
+                      <MessageFeedback
+                        text={message.parts
+                          .filter((part): part is { type: "text"; text: string } => part.type === "text")
+                          .map((part) => part.text)
+                          .join("\n\n")}
+                      />
+                    </div>
+                  )}
                 </MessageContent>
               </Message>
             )})
@@ -455,7 +566,7 @@ function Chat() {
           aria-label="Kembali ke pesan terbaru"
         />
       </Conversation>
-       <footer className="relative z-20 shrink-0 border-t border-border/70 bg-background/95 px-3 pt-3 pb-[max(.75rem,env(safe-area-inset-bottom))] backdrop-blur-xl sm:px-6">
+       <footer className="relative z-20 shrink-0 px-2 pt-2 pb-[max(.5rem,env(safe-area-inset-bottom))] sm:px-5">
         {uploadError && (
           <p role="alert" className="mx-auto mb-2 max-w-3xl text-xs text-destructive">
             {uploadError}
@@ -472,39 +583,58 @@ function Chat() {
             }}
           />
         )}
-        <PromptInput
-          multiple
-          maxFiles={10}
-          maxFileSize={20 * 1024 * 1024}
-          onError={(error) =>
-            setUploadError(
-              error.code === "max_file_size"
-                ? "Ukuran maksimal setiap file adalah 20 MB."
-                : error.code === "max_files"
-                  ? "Maksimal 10 file dalam satu pesan."
-                  : "Tipe file ini tidak didukung.",
-            )
-          }
-          onSubmit={({ text, files }) => submit(text, files)}
-           className="mx-auto w-full max-w-3xl [&_[data-slot=input-group]]:overflow-hidden [&_[data-slot=input-group]]:rounded-2xl [&_[data-slot=input-group]]:border-brand-line [&_[data-slot=input-group]]:bg-card [&_[data-slot=input-group]]:shadow-panel [&_[data-slot=input-group]]:focus-within:border-ring"
-        >
-          <AttachmentHeader />
-          <PromptInputTextarea
-            value={input}
-            onChange={(event) => setInput(event.currentTarget.value)}
-            placeholder={`Tulis pesan untuk WenGPT ${session?.mode === "webh" ? "WEBH" : "Prime"}…`}
-            className="min-h-12 max-h-40 min-w-0 px-4 pt-3 pb-1 text-base leading-6 sm:text-sm"
-          />
-          <PromptInputFooter className="min-h-10 px-2 pb-2">
-            <AttachmentButton />
-            <span className="mr-auto text-[10px] text-muted-foreground">Max Size. 20MB</span>
-            <PromptInputSubmit
-              status={streaming ? "streaming" : "ready"}
-              onStop={() => stopSession(sessionId)}
-              className="size-8 shrink-0 rounded-lg"
-            />
-          </PromptInputFooter>
-        </PromptInput>
+        <CyberFrame className="mx-auto w-full max-w-3xl" innerClassName="bg-card/95 backdrop-blur-xl">
+          <PromptInput
+            multiple
+            maxFiles={10}
+            maxFileSize={20 * 1024 * 1024}
+            onError={(error) =>
+              setUploadError(
+                error.code === "max_file_size"
+                  ? "Ukuran maksimal setiap file adalah 20 MB."
+                  : error.code === "max_files"
+                    ? "Maksimal 10 file dalam satu pesan."
+                    : "Tipe file ini tidak didukung.",
+              )
+            }
+            onSubmit={({ text, files }) => submit(text, files)}
+            className="[&_[data-slot=input-group]]:overflow-hidden [&_[data-slot=input-group]]:border-0 [&_[data-slot=input-group]]:bg-transparent [&_[data-slot=input-group]]:shadow-none"
+          >
+            <AttachmentHeader />
+            <div className="flex items-end gap-2 px-2.5 pt-2">
+              <span className="brand-mark mb-1 size-9 shrink-0 rounded-full">
+                <WenGptMark className="size-4" />
+              </span>
+              <PromptInputTextarea
+                value={input}
+                onChange={(event) => setInput(event.currentTarget.value)}
+                placeholder={`Tulis pesan untuk WenGPT ${session?.mode === "webh" ? "WEBH" : "Prime"}...`}
+                className={cn(
+                  "max-h-56 min-w-0 flex-1 px-2 pt-2 pb-1 text-base leading-6 sm:text-sm",
+                  expanded ? "min-h-40" : "min-h-12",
+                )}
+              />
+            </div>
+            <PromptInputFooter className="min-h-11 px-2 pb-2">
+              <AttachmentButton />
+              <span className="mr-auto rounded-full border border-border/60 bg-muted/50 px-2.5 py-1 text-[10px] text-muted-foreground">Max Size: 20MB</span>
+              <PromptInputButton
+                aria-label={expanded ? "Kecilkan kotak pesan" : "Perbesar kotak pesan"}
+                title={expanded ? "Kecilkan kotak pesan" : "Perbesar kotak pesan"}
+                onClick={() => setExpanded((value) => !value)}
+              >
+                {expanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+              </PromptInputButton>
+              <PromptInputSubmit
+                status={streaming ? "streaming" : "ready"}
+                onStop={() => stopSession(sessionId)}
+                className="size-9 shrink-0 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                {streaming ? undefined : <SendHorizontal className="size-4" />}
+              </PromptInputSubmit>
+            </PromptInputFooter>
+          </PromptInput>
+        </CyberFrame>
       </footer>
       <Dialog open={chatPreview !== null} onOpenChange={(o) => !o && setChatPreview(null)}>
         <DialogContent className="flex max-h-[90dvh] max-w-3xl flex-col gap-3 p-4">
