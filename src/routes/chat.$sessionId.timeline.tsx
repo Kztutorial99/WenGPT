@@ -19,6 +19,28 @@ import { Button } from "@/components/ui/button";
 import { isWorkCheckpoint, loadCheckpoints, markTimelineRead, type Checkpoint, type TimelineEntry, type ToolRun } from "@/lib/chat-store";
 import { useChatStore } from "@/lib/use-chat-store";
 import { AgentProgress } from "@/components/agent-progress";
+import { CodeBlock } from "@/components/ai-elements/code-block";
+
+const EXT: Record<string, string> = { py: "python", js: "javascript", jsx: "jsx", ts: "typescript", tsx: "tsx", html: "html", css: "css", json: "json", md: "markdown", sh: "bash", yml: "yaml", yaml: "yaml", go: "go", rs: "rust", java: "java", c: "c", cpp: "cpp", php: "php", rb: "ruby", sql: "sql", kt: "kotlin", swift: "swift", cs: "csharp", lua: "lua", xml: "xml", toml: "toml", vue: "vue", dart: "dart" };
+
+function LiveEditor({ path, code, typing }: { path: string; code: string; typing: boolean }) {
+  const name = path.split("/").pop() || "file";
+  const lang = EXT[name.split(".").pop()?.toLowerCase() ?? ""] ?? "text";
+  const lines = code.split("\n").length;
+  return (
+    <div className="mt-2 overflow-hidden rounded-lg border border-border/70 bg-card/60 shadow-sm">
+      <div className="flex items-center gap-2 border-b border-border/70 bg-muted/40 px-3 py-1.5 text-[11px]">
+        <span className="flex gap-1"><i className="size-2 rounded-full bg-destructive/70" /><i className="size-2 rounded-full bg-warning/70" /><i className="size-2 rounded-full bg-success/70" /></span>
+        <span className="min-w-0 flex-1 truncate font-mono text-foreground/85">{name}</span>
+        <span className="text-muted-foreground">{lang} · {lines} baris</span>
+        {typing ? <span className="animate-pulse text-primary">Editor AI mengetik…</span> : <span className="text-success">Tersimpan</span>}
+      </div>
+      <div className="max-h-72 overflow-auto text-xs [&_pre]:!m-0 [&_pre]:!p-3 [&_pre]:!text-xs" ref={(el) => { if (el && typing) el.scrollTop = el.scrollHeight; }}>
+        <CodeBlock code={code} language={lang as never} showLineNumbers className="rounded-none border-0" />
+      </div>
+    </div>
+  );
+}
 export const Route = createFileRoute("/chat/$sessionId/timeline")({
   head: () => ({
     meta: [
@@ -378,6 +400,9 @@ function RunItem({ run, number, sessionId, live }: { run: ToolRun; number: numbe
           })()}
           {(failed || stopped) && <span className="ml-1 text-destructive">· gagal</span>}
         </p>
+      )}
+      {run.name === "write_file" && typeof run.input.content === "string" && run.input.content && (
+        <LiveEditor path={String(run.input.path ?? "")} code={run.input.content} typing={!output && live} />
       )}
     </li>
   );
