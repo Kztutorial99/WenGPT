@@ -419,8 +419,12 @@ function Chat() {
                       WenGPT
                       <Crown className="size-3.5 fill-primary text-primary" />
                     </span>
-                    {active && message.agent?.label === "Berpikir" && !work && (
-                      <span className="ml-1 rounded-full border border-border/70 px-2 py-0.5 text-[10px] font-normal text-muted-foreground">Berpikir</span>
+                    {active && !hasResponse && !work && (
+                      <span className="ml-1 inline-flex items-center gap-1.5 rounded-full border border-border/70 px-2 py-0.5 text-[10px] font-normal text-muted-foreground">
+                        <span className="size-1.5 animate-pulse rounded-full bg-primary" />
+                        {message.agent?.label ?? "Menyambungkan"}
+                        {message.agent?.startedAt && <WorkDuration start={message.agent.startedAt} />}
+                      </span>
                     )}
                   </div>
                 )}
