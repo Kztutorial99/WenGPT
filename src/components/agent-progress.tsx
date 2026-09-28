@@ -133,9 +133,6 @@ export function AgentProgress({
     : state === "DISCONNECTED" || state === "PAUSED"
       ? (agent.label ?? STATE_LABEL[state])
        : (STATE_LABEL[state] ?? agent.label ?? state);
-  const quiet = live && Date.now() - (agent.lastEventAt ?? agent.lastBeat ?? Date.now()) > 6_000;
-  const beatAlive = !agent.lastBeat || Date.now() - agent.lastBeat < 15_000;
-  const stalled = quiet && beatAlive;
   const latestByPath = [...new Map(agent.files.map((f) => [f.path, f])).values()];
 
   return (
@@ -155,13 +152,12 @@ export function AgentProgress({
         ) : live && runningStep ? (
           // Tahap berjalan sudah punya spinner di daftar; di judul cukup titik berdenyut (hindari animasi ganda).
           <span className="grid size-3.5 place-items-center"><span className="size-2 animate-pulse rounded-full bg-warning" /></span>
-        ) : live && !quiet ? (
+        ) : live ? (
           <Loader2 className="size-3.5 animate-spin text-warning" />
         ) : (
           <Circle className="size-3.5 text-muted-foreground" />
         )}
         <span className="font-medium">{label}</span>
-        {stalled && <span className="text-muted-foreground">· masih bekerja…</span>}
       </div>
       {live && !runningStep && agent.detail && !/^Berpikir/.test(agent.detail) && friendlyDetail(agent.detail) !== label && (
         <p className="mt-0.5 truncate pl-5 text-muted-foreground">{friendlyDetail(agent.detail)}</p>
