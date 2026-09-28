@@ -56,6 +56,7 @@ const friendlyDetail = (detail: string) => {
     return file ? `Mengubah ${file.split("/").pop()}` : "Memperbarui file project";
   if (/^(Membuat|Mengubah|Menulis|Menguji|Menyiapkan|Memperbarui|Menjalankan|Membaca|Mencari|Memperbaiki|Menyimpan)\b/.test(trimmed)) return trimmed;
   if (trimmed.startsWith("/home/user/")) return `Mengerjakan ${trimmed.split("/").pop()}`;
+  if (file) return `Mengerjakan ${file.split("/").pop()}`;
   if (/\s|&&|\|/.test(trimmed)) return "Menjalankan langkah kerja";
   return trimmed;
 };
@@ -123,7 +124,7 @@ export function AgentProgress({
   const runningStep = live ? agent.milestones.find((m) => m.status === "running") : undefined;
   const label = wrapping
     ? "Menyiapkan laporan hasil"
-    : live && agent.detail && /^(Membuat|Mengubah|Menulis|Menguji|Menyiapkan|Memperbaiki)/.test(agent.detail)
+    : live && agent.detail && /^(Membuat|Mengubah|Menulis|Menguji|Menyiapkan|Memperbaiki|Menyimpan)/.test(agent.detail)
     ? agent.detail
     : runningStep
     ? runningStep.title

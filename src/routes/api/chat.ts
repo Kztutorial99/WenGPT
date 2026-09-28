@@ -980,7 +980,7 @@ export const Route = createFileRoute("/api/chat")({
                 await sb.commands.run(`mkdir -p "$(dirname '${p.replace(/'/g, "'\\''")}')"`, { cwd: "/home/user" }).catch(() => null);
                 await sb.files.write(p, content);
                 readFiles.add(p);
-                if (ckpt.state !== "FIXING") setState("EXECUTING", p);
+                if (ckpt.state !== "FIXING") setState("EXECUTING", `Menyimpan ${p.split("/").pop()}`);
                 const d = emitFile(p, exists ? "write" : "create", oldText, content, opId);
                 await recordOp(opId, "write_file", true, p);
                 return { ok: true, path: p, bytes: content.length, changedLines: d.ranges };
