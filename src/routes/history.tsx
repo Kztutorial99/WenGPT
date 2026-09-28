@@ -30,12 +30,13 @@ function HistoryPage() {
     markHistoryRead();
   }, []);
   const sorted = [...snapshot.sessions].sort((a, b) => b.updatedAt - a.updatedAt);
+  const mode = snapshot.sessions.find((session) => session.id === snapshot.activeId)?.mode ?? "prime";
   const make = () => {
     const id = createSession();
     navigate({ to: "/chat/$sessionId", params: { sessionId: id } });
   };
   return (
-    <main className="min-h-dvh overflow-y-auto bg-background text-foreground">
+    <main data-mode={mode} className="chat-shell cyber-grid min-h-dvh overflow-y-auto bg-background text-foreground">
       <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-border/60 bg-background/88 px-4 py-3 backdrop-blur-xl">
         <Button asChild variant="outline" size="icon">
           {snapshot.activeId ? (

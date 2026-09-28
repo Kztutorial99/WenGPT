@@ -359,8 +359,9 @@ function SettingsPage() {
   const snapshot = useChatStore();
   useEffect(() => void loadSecrets(), []);
   const back = snapshot.activeId;
+  const mode = snapshot.sessions.find((session) => session.id === back)?.mode ?? "prime";
   return (
-    <main className="min-h-dvh bg-background text-foreground">
+    <main data-mode={mode} className="chat-shell cyber-grid min-h-dvh bg-background text-foreground">
       <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-border/60 bg-background/88 px-4 py-3 backdrop-blur-xl">
         <Button asChild variant="outline" size="icon">
           {back ? (

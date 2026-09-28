@@ -4,7 +4,6 @@ import { streamText, convertToModelMessages, tool, stepCountIs, type UIMessage }
 import { z } from "zod";
 import { Sandbox } from "e2b";
 import { verifySecret } from "@/lib/secret-test.server";
-import { isWebhRequest } from "@/lib/webh-mode";
 
 import AGENT_INSTRUCTIONS from "../../../AGENT.md?raw";
 import WEBH_INSTRUCTIONS from "../../../WEBH.md?raw";
@@ -215,6 +214,7 @@ type Ev =
   | { t: "think"; v: string }
   | { t: "sandbox"; id: string }
   | { t: "sandbox_reset" }
+  | { t: "mode"; mode: "webh" | "prime" }
   | { t: "tool"; id: string; name: string; input: unknown; at: number }
   | { t: "result"; id: string; output: unknown; at: number; durationMs: number }
   | { t: "error"; v: string }
@@ -367,6 +367,7 @@ export const Route = createFileRoute("/api/chat")({
           attachments?: Attachment[];
           secrets?: { name: string; service: string; value: string }[];
           taskId?: string;
+          mode?: "webh" | "prime";
         };
         try {
           body = (await request.json()) as typeof body;
@@ -596,6 +597,18 @@ export const Route = createFileRoute("/api/chat")({
           return file ? `Mengubah ${file}` : "Memperbarui project";
         };
         const tools = {
+          set_theme: tool({
+            description:
+              "WAJIB dipanggil sekali sebagai alat pertama pada setiap giliran. Pilih tema berdasarkan pemahaman topik, bukan pencocokan kata. Gunakan webh untuk web security, reverse engineering web/aplikasi, malware analysis defensif, pentest, audit keamanan, vulnerability research, exploit analysis, forensik, atau permintaan langsung tema hacker/WEBH. Gunakan prime untuk topik lain, termasuk ketika pembahasan keamanan selesai atau pengguna meminta tema default/Prime.",
+            inputSchema: z.object({
+              mode: z.enum(["webh", "prime"]),
+              reason: z.string().max(160).describe("Alasan topik singkat; tidak ditampilkan di chat"),
+            }),
+            execute: async ({ mode }) => {
+              emit({ t: "mode", mode });
+              return { ok: true, mode };
+            },
+          }),
           set_intent: tool({
             description:
               "WAJIB untuk tugas coding sebelum alat pengubah proyek. status 'clear' = boleh dikerjakan; 'need_clarification' = tanya 1-3 hal penting dulu (alat pengubah proyek akan ditolak di giliran ini).",
@@ -1042,8 +1055,6 @@ export const Route = createFileRoute("/api/chat")({
         const lastText = String(
           (lastUser?.parts as { type: string; text?: string }[] | undefined)?.find((p) => p.type === "text")?.text ?? "",
         );
-        // Both the instructions and the client palette use the same classifier.
-        const webhMode = isWebhRequest(lastText);
         // Cepat: pikir dalam hanya untuk analisis/debug; buat script/chat biasa pakai effort rendah.
         const needsThink =
           lastText.length > 400 ||
@@ -1087,7 +1098,7 @@ export const Route = createFileRoute("/api/chat")({
 
         const result = streamText({
           model: provider.chatModel(model),
-            system: `${PRIME_PROMPT}${webhMode ? `\n\n${WEBH_PROMPT}` : ""}${resumed ? `\n\n[CHECKPOINT TUGAS ${taskId} - LANJUTKAN, JANGAN ULANG DARI AWAL]\nStatus terakhir: ${ckpt.state}. Operasi terakhir yang berhasil: ${ckpt.lastOp ?? "-"}.\nTahap: ${ckpt.milestones.map((m) => `${m.title}=${m.status}`).join(", ") || "-"}.\nFile yang sudah diubah: ${[...new Set(ckpt.files.map((f) => f.path))].join(", ") || "-"}.\nTes terakhir: ${ckpt.lastTest ? `${ckpt.lastTest.command} (exit ${ckpt.lastTest.exitCode})` : "-"}.\nError terakhir: ${ckpt.lastError ? ckpt.lastError.message.slice(0, 500) : "-"}.\nOperasi yang sudah berhasil tidak perlu diulang (server juga akan melewatinya). Lanjutkan dari operasi berikutnya yang belum berhasil. Tahap yang masih running/pending wajib ditutup dengan alat milestone sebelum jawaban akhir. File yang sudah dibuat tetap ada; baca ulang dengan read_file sebelum mengedit.` : ""}\n\nTanggal saat ini (waktu Makassar, UTC+8): ${today}. Untuk permintaan info terbaru, cari dengan tahun berjalan dan cek tanggal sumber sebelum menjawab.`,
+            system: `${PRIME_PROMPT}\n\n[PEMILIHAN MODE VISUAL]\nTema sesi saat ini: ${body.mode === "webh" ? "WEBH" : "Prime"}. Pada setiap giliran, pahami topik secara semantik lalu panggil set_theme sebagai alat pertama sebelum jawaban atau alat lain. Jangan memilih berdasarkan kecocokan kata semata. WEBH berlaku selama topik keamanan atau reverse engineering terkait masih berlanjut; kembali ke Prime saat percakapan beralih atau pembahasan itu selesai. Permintaan tema eksplisit pengguna selalu diutamakan. Instruksi WEBH di bawah HANYA berlaku jika set_theme memilih webh:\n${WEBH_PROMPT}${resumed ? `\n\n[CHECKPOINT TUGAS ${taskId} - LANJUTKAN, JANGAN ULANG DARI AWAL]\nStatus terakhir: ${ckpt.state}. Operasi terakhir yang berhasil: ${ckpt.lastOp ?? "-"}.\nTahap: ${ckpt.milestones.map((m) => `${m.title}=${m.status}`).join(", ") || "-"}.\nFile yang sudah diubah: ${[...new Set(ckpt.files.map((f) => f.path))].join(", ") || "-"}.\nTes terakhir: ${ckpt.lastTest ? `${ckpt.lastTest.command} (exit ${ckpt.lastTest.exitCode})` : "-"}.\nError terakhir: ${ckpt.lastError ? ckpt.lastError.message.slice(0, 500) : "-"}.\nOperasi yang sudah berhasil tidak perlu diulang (server juga akan melewatinya). Lanjutkan dari operasi berikutnya yang belum berhasil. Tahap yang masih running/pending wajib ditutup dengan alat milestone sebelum jawaban akhir. File yang sudah dibuat tetap ada; baca ulang dengan read_file sebelum mengedit.` : ""}\n\nTanggal saat ini (waktu Makassar, UTC+8): ${today}. Untuk permintaan info terbaru, cari dengan tahun berjalan dan cek tanggal sumber sebelum menjawab.`,
           messages: modelMessages,
           tools,
           stopWhen: stepCountIs(50),

@@ -15,20 +15,20 @@
   --color-grid: var(--grid); --color-brand-line: var(--brand-line);
 }
 :root, .dark {
-  --radius: .625rem; --background: oklch(.115 .019 24); --foreground: oklch(.97 .006 25); --card: oklch(.155 .024 24); --card-foreground: oklch(.97 .006 25);
-  --popover: oklch(.16 .023 24); --popover-foreground: oklch(.97 .006 25); --primary: oklch(.62 .245 26); --primary-foreground: oklch(.99 .003 25);
-  --secondary: oklch(.2 .027 24); --secondary-foreground: oklch(.94 .008 25); --muted: oklch(.205 .022 24); --muted-foreground: oklch(.71 .012 25);
-  --accent: oklch(.245 .047 24); --accent-foreground: oklch(.98 .006 25); --destructive: oklch(.68 .22 25); --destructive-foreground: oklch(.98 .006 25);
-  --border: oklch(.3 .055 24); --input: oklch(.27 .048 24); --ring: oklch(.62 .245 26); --success: oklch(.72 .16 150); --warning: oklch(.82 .16 88);
-  --grid: oklch(.49 .13 25 / .13); --brand-line: oklch(.58 .19 26 / .45); --grid-wash: oklch(.27 .07 25 / .18); --mark-glow: oklch(.61 .215 25 / .7);
+  --radius: .625rem; --background: oklch(.14 .024 24); --foreground: oklch(.985 .005 25); --card: oklch(.19 .03 24); --card-foreground: oklch(.985 .005 25);
+  --popover: oklch(.205 .03 24); --popover-foreground: oklch(.985 .005 25); --primary: oklch(.71 .25 28); --primary-foreground: oklch(.99 .003 25);
+  --secondary: oklch(.255 .038 24); --secondary-foreground: oklch(.97 .008 25); --muted: oklch(.255 .034 24); --muted-foreground: oklch(.79 .014 25);
+  --accent: oklch(.31 .065 24); --accent-foreground: oklch(.99 .005 25); --destructive: oklch(.71 .22 25); --destructive-foreground: oklch(.99 .006 25);
+  --border: oklch(.38 .075 24); --input: oklch(.34 .065 24); --ring: oklch(.71 .25 28); --success: oklch(.78 .18 155); --warning: oklch(.87 .18 92);
+  --grid: oklch(.56 .15 25 / .18); --brand-line: oklch(.66 .21 26 / .58); --grid-wash: oklch(.36 .1 25 / .2); --mark-glow: oklch(.68 .23 25 / .78);
 }
 .chat-shell[data-mode="webh"] {
-  --background: oklch(.105 .015 165); --foreground: oklch(.96 .012 155); --card: oklch(.155 .024 162); --card-foreground: oklch(.96 .012 155);
-  --popover: oklch(.16 .025 162); --popover-foreground: oklch(.96 .012 155); --primary: oklch(.75 .19 150); --primary-foreground: oklch(.12 .025 165);
-  --secondary: oklch(.21 .03 162); --secondary-foreground: oklch(.94 .015 155); --muted: oklch(.21 .028 162); --muted-foreground: oklch(.73 .022 156);
-  --accent: oklch(.26 .06 153); --accent-foreground: oklch(.96 .012 155); --destructive: oklch(.68 .21 25); --destructive-foreground: oklch(.98 .006 25);
-  --border: oklch(.36 .072 154); --input: oklch(.31 .052 155); --ring: oklch(.75 .19 150);
-  --grid: oklch(.72 .16 151 / .085); --grid-wash: oklch(.41 .09 154 / .08); --brand-line: oklch(.66 .16 150 / .48); --mark-glow: oklch(.72 .18 150 / .65);
+  --background: oklch(.135 .028 165); --foreground: oklch(.98 .016 155); --card: oklch(.2 .04 162); --card-foreground: oklch(.98 .016 155);
+  --popover: oklch(.21 .042 162); --popover-foreground: oklch(.98 .016 155); --primary: oklch(.82 .21 150); --primary-foreground: oklch(.13 .03 165);
+  --secondary: oklch(.26 .048 162); --secondary-foreground: oklch(.97 .02 155); --muted: oklch(.26 .045 162); --muted-foreground: oklch(.8 .032 156);
+  --accent: oklch(.32 .08 153); --accent-foreground: oklch(.98 .016 155); --destructive: oklch(.7 .21 25); --destructive-foreground: oklch(.99 .006 25);
+  --border: oklch(.44 .1 154); --input: oklch(.38 .08 155); --ring: oklch(.82 .21 150);
+  --grid: oklch(.76 .18 151 / .13); --grid-wash: oklch(.48 .12 154 / .12); --brand-line: oklch(.75 .2 150 / .64); --mark-glow: oklch(.78 .2 150 / .74);
   color-scheme: dark;
 }
 @layer base {
@@ -46,31 +46,19 @@
 }
 @utility brand-mark { display: grid; place-items: center; flex-shrink: 0; border: 1px solid var(--brand-line); border-radius: .4rem; color: var(--primary); background: color-mix(in oklab, var(--card) 90%, transparent); box-shadow: 0 10px 28px -18px var(--mark-glow); }
 
-/* Kotak hadir dahulu, lalu simbol muncul dengan kilau singkat; tidak berputar tanpa henti. */
+/* Box animates only initially; Inner icon repeats with pauses. */
 @keyframes wengpt-mark-reveal {
-  0% { opacity: 0; transform: scale(.72) rotate(-8deg); }
-  62% { opacity: 1; transform: scale(1.065) rotate(2deg); }
-  100% { opacity: 1; transform: scale(1) rotate(0); }
-}
-@keyframes wengpt-symbol-reveal {
-  0%, 30% { opacity: 0; transform: scale(.5) rotate(-30deg); filter: blur(3px); }
-  75% { opacity: 1; transform: scale(1.1) rotate(4deg); filter: blur(0); }
-  100% { opacity: 1; transform: scale(1) rotate(0); filter: blur(0); }
-}
-.brand-mark { animation: wengpt-mark-cycle 8s ease-in-out infinite; }
-.brand-mark > svg { animation: wengpt-symbol-cycle 8s ease-in-out infinite; }
-@keyframes wengpt-mark-cycle {
-  0% { opacity: 0; transform: scale(.72) rotate(-8deg); }
-  9%, 84% { opacity: 1; transform: scale(1) rotate(0); }
-  91% { opacity: .75; transform: scale(.94); }
-  100% { opacity: 0; transform: scale(.72) rotate(-8deg); }
+  0% { opacity: 0; transform: scale(.8) translateY(6px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
 }
 @keyframes wengpt-symbol-cycle {
-  0%, 3% { opacity: 0; transform: scale(.5) rotate(-30deg); }
-  13%, 85% { opacity: 1; transform: scale(1) rotate(0); }
-  91% { opacity: .4; transform: scale(.85); }
-  100% { opacity: 0; transform: scale(.5) rotate(-30deg); }
+  0%, 82%, 100% { transform: scale(1); filter: brightness(1); }
+  88% { transform: scale(1.15) rotate(5deg); filter: brightness(1.3); }
+  94% { transform: scale(1) rotate(0); filter: brightness(1); }
 }
+.brand-mark { animation: wengpt-mark-reveal 0.7s cubic-bezier(0.2, 0.8, 0.2, 1.1) both; }
+.brand-mark > svg { animation: wengpt-symbol-cycle 10s ease-in-out infinite 1s; }
+
 @media (prefers-reduced-motion: reduce) {
   .brand-mark, .brand-mark > svg { animation: none; }
 }
@@ -79,16 +67,25 @@
   background-size: 70px 70px, 70px 70px, 100% 100%;
   background-position: center top;
 }
+/* Grid with subtle traveling dots/flow. */
+@keyframes matrix-grid-flow {
+  from { background-position: 0 0, 0 0, 0 0; }
+  to { background-position: 96px 96px, 96px 96px, 0 0; }
+}
 .chat-shell[data-mode="webh"]::before {
   content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
-  background-image: linear-gradient(90deg, transparent 0 48%, var(--grid) 49% 51%, transparent 52%), linear-gradient(0deg, transparent 0 48%, var(--grid) 49% 51%, transparent 52%);
-  background-size: 96px 96px; opacity: .2;
-  animation: matrix-grid-drift 36s linear infinite;
+  background-image: 
+    radial-gradient(circle at 1.5px 1.5px, var(--primary) 1.2px, transparent 0),
+    linear-gradient(90deg, transparent 0 48%, var(--grid) 49% 51%, transparent 52%), 
+    linear-gradient(0deg, transparent 0 48%, var(--grid) 49% 51%, transparent 52%);
+  background-size: 96px 96px, 96px 96px, 96px 96px;
+  opacity: .18;
+  animation: matrix-grid-flow 25s linear infinite;
   mask-image: linear-gradient(to bottom, transparent, black 15%, black 85%, transparent);
 }
 .chat-shell[data-mode="webh"] > * { position: relative; }
-@keyframes matrix-grid-drift { to { transform: translate3d(-96px, 96px, 0); } }
 @media (prefers-reduced-motion: reduce) { .chat-shell[data-mode="webh"]::before { animation: none; } }
+
 @utility wengpt-markdown {
   overflow-wrap: anywhere; word-break: normal;
   & > * + * { margin-top: .85rem; }
@@ -110,7 +107,6 @@
 .secret-card { animation: fade-in .3s ease-out; }
 .secret-slider { animation: secret-slide-up .35s cubic-bezier(.2,.9,.25,1.1) both; }
 @keyframes secret-slide-up { from { opacity: 0; transform: translateY(18px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
-
 
 /* Popup buka link: URL panjang tetap di dalam kotak */
 [data-streamdown="link-safety-modal"] *, .font-mono.break-all { overflow-wrap: anywhere; word-break: break-all; }

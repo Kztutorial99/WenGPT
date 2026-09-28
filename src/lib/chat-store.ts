@@ -1,5 +1,4 @@
 import { loadSecrets, secretPayload } from "./secret-store";
-import { isWebhRequest } from "./webh-mode";
 export type ToolOut = {
   exitCode?: number;
   stdout?: string;
@@ -600,6 +599,7 @@ async function runTurn({
         sessionId,
         taskId: assistantId.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 80),
         sandboxId: getSession(sessionId)?.sandboxId ?? null,
+        mode: getSession(sessionId)?.mode ?? "prime",
         files: loadAllFiles()
           .filter((file) => !file.failed && !file.attachmentId && !file.truncated)
           .slice(0, 40)
@@ -723,6 +723,9 @@ async function runTurn({
           if (event.t === "file") void syncSandboxFiles(sessionId);
         } else if (event.t === "sandbox") {
           patchSession(sessionId, (current) => ({ ...current, sandboxId: String(event["id"]) }));
+        } else if (event.t === "mode") {
+          const mode = event["mode"] === "webh" ? "webh" : "prime";
+          patchSession(sessionId, (current) => ({ ...current, mode }));
         } else if (event.t === "sandbox_reset") {
           patchAssistant(sessionId, assistantId, (parts) => [
             ...parts,
@@ -819,7 +822,6 @@ export async function sendMessage(
   if ((!prompt && !incoming.length) || !session || isStreaming(sessionId)) return;
   const visiblePrompt =
     prompt || `Analisis ${incoming.length === 1 ? "file ini" : "file-file ini"}.`;
-  const mode = isWebhRequest(visiblePrompt) ? "webh" : "prime";
   const now = Date.now();
   const user: MessageData = {
     id: crypto.randomUUID(),
@@ -845,7 +847,6 @@ export async function sendMessage(
   // Tampilkan pesan & indikator seketika, baru siapkan lampiran/secret di belakang.
   patchSession(sessionId, (current) => ({
     ...current,
-    mode,
     title: current.messages.length ? current.title : titleFrom([user]),
     updatedAt: now,
     messages: [...history, assistant],
