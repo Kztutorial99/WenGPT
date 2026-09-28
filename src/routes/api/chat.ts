@@ -1241,7 +1241,7 @@ export const Route = createFileRoute("/api/chat")({
                     part.error instanceof Error ? part.error.message : String(part.error);
                   emit({ t: "error", v: `Tidak bisa menghubungi server AI. ${reason}` });
                   streamFailed = true;
-                  cachedUrl = null;
+                  delete cachedUrl[aiKind];
                   break;
                 }
               }
