@@ -63,6 +63,10 @@ def check(acc_id, user, key):
     print(f"== Akun {acc_id} ({user})")
     try:
         status = kaggle_get(user, key, "kernels/status", userName=user, kernelSlug=SLUG).get("status", "")
+    except requests.HTTPError as e:
+        if e.response is not None and e.response.status_code in (403, 404):
+            print("  notebook belum ada di akun ini -> buat & nyalakan"); restart(acc_id, user, key); return
+        print("  gagal cek status:", e); return
     except Exception as e:
         print("  gagal cek status:", e); return
     print("  status sesi:", status)
