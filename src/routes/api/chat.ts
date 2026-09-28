@@ -1241,6 +1241,9 @@ export const Route = createFileRoute("/api/chat")({
         });
 
         const toolStartedAt = new Map<string, number>();
+        const inputBuf = new Map<string, string>();
+        const inputName = new Map<string, string>();
+        const announced = new Set<string>();
         let rawText = "";
         let sentText = "";
         let sentThink = "";
@@ -1300,8 +1303,19 @@ export const Route = createFileRoute("/api/chat")({
                   }
                 } else if (part.type === "finish-step") {
                   resetStep();
+                } else if (part.type === "tool-input-delta") {
+                  // Status langsung saat model mulai menulis file (tidak menunggu isi file selesai dibuat).
+                  const buf = (inputBuf.get(part.id) ?? "") + part.delta;
+                  inputBuf.set(part.id, buf);
+                  const fp = buf.match(/"path"\s*:\s*"([^"]+)"/)?.[1]?.split("/").pop();
+                  if (fp && !announced.has(part.id)) {
+                    announced.add(part.id);
+                    setState("EXECUTING", `${inputName.get(part.id) === "edit_file" ? "Mengubah" : "Menulis"} ${fp}`);
+                  }
                 } else if (part.type === "tool-input-start") {
                   resetStep();
+                  inputName.set(part.id, part.toolName);
+                  if (part.toolName === "write_file" || part.toolName === "edit_file") setState("EXECUTING", "Menyiapkan file");
                   emit({ t: "tool", id: part.id, name: part.toolName, input: {}, at: Date.now() });
                 } else if (part.type === "tool-call") {
                   if (part.toolName === "request_secret") calledSecret = true;
