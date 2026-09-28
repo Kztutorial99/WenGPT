@@ -1,0 +1,25 @@
+name: Diagnose Cloudflare Worker
+on:
+  workflow_dispatch:
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Capture live Worker error
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          bunx wrangler tail wengpt --format pretty > /tmp/tail.log 2>&1 &
+          TAIL_PID=$!
+          for i in $(seq 1 15); do
+            grep -q "Connected to wengpt" /tmp/tail.log && break
+            sleep 1
+          done
+          curl -sS -o /dev/null https://wengpt.supportakuninstan.workers.dev/ || true
+          sleep 5
+          kill $TAIL_PID || true
+          wait $TAIL_PID || true
+          cat /tmp/tail.log
