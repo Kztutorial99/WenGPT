@@ -22,7 +22,3 @@ jobs:
           UPSTASH_TOKEN: ${{ secrets.UPSTASH_TOKEN }}
           KAGGLE_USERNAME_1: ${{ secrets.KAGGLE_USERNAME_1 }}
           KAGGLE_KEY_1: ${{ secrets.KAGGLE_KEY_1 }}
-          KAGGLE_USERNAME_2: ${{ secrets.KAGGLE_USERNAME_2 }}
-          KAGGLE_KEY_2: ${{ secrets.KAGGLE_KEY_2 }}
-          KAGGLE_USERNAME_3: ${{ secrets.KAGGLE_USERNAME_3 }}
-          KAGGLE_KEY_3: ${{ secrets.KAGGLE_KEY_3 }}
