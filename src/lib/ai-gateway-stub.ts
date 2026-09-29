@@ -10,6 +10,9 @@ class GatewayError extends Error {
     super(message, options);
     this.name = "GatewayError";
   }
+  static isInstance(error: unknown): boolean {
+    return error instanceof this;
+  }
 }
 class GatewayAuthenticationError extends GatewayError {
   override name = "GatewayAuthenticationError";
