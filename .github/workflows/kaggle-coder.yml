@@ -15,8 +15,8 @@ jobs:
         env:
           UPSTASH_URL: ${{ secrets.UPSTASH_URL }}
           UPSTASH_TOKEN: ${{ secrets.UPSTASH_TOKEN }}
-          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME_1 }}
-          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY_1 }}
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME_PUMPYDARK }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY_PUMPYDARK }}
         run: |
           mkdir -p ~/.kaggle
           python - <<'PY'
