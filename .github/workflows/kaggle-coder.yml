@@ -10,7 +10,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install -q kaggle
+      - run: pip install -q "kaggle==1.6.17"
       - name: Push & start Coder server di Kaggle
         env:
           UPSTASH_URL: ${{ secrets.UPSTASH_URL }}
