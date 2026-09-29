@@ -18,12 +18,16 @@ jobs:
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME_1 }}
           KAGGLE_KEY: ${{ secrets.KAGGLE_KEY_1 }}
         run: |
+          mkdir -p ~/.kaggle
           python - <<'PY'
-          import json, os, tempfile
+          import json, os
+          json.dump({"username": os.environ["KAGGLE_USERNAME"], "key": os.environ["KAGGLE_KEY"]},
+                    open(os.path.expanduser("~/.kaggle/kaggle.json"), "w"))
+          os.chmod(os.path.expanduser("~/.kaggle/kaggle.json"), 0o600)
           src = open("kaggle/coder_kaggle.py").read()
           src = (src.replace('"__UPSTASH_URL__"', json.dumps(os.environ["UPSTASH_URL"]))
                     .replace('"__UPSTASH_TOKEN__"', json.dumps(os.environ["UPSTASH_TOKEN"])))
-          d = tempfile.mkdtemp()
+          d = os.path.expanduser("~/coder-push"); os.makedirs(d, exist_ok=True)
           open(f"{d}/coder_kaggle.py", "w").write(src)
           json.dump({"id": f'{os.environ["KAGGLE_USERNAME"]}/wengpt-coder-server',
                      "title": "wengpt-coder-server", "code_file": "coder_kaggle.py",
@@ -34,20 +38,4 @@ jobs:
                      "competition_sources": [], "kernel_sources": [], "model_sources": []},
                     open(f"{d}/kernel-metadata.json", "w"))
           PY
-          kaggle kernels push -p $(python -c "import tempfile;print(tempfile.gettempdir())") 2>/dev/null || true
-          cd $(mktemp -d) && python - <<'PY'
-          import json, os
-          src = open("/home/runner/work/WenGPT/WenGPT/kaggle/coder_kaggle.py").read()
-          src = (src.replace('"__UPSTASH_URL__"', json.dumps(os.environ["UPSTASH_URL"]))
-                    .replace('"__UPSTASH_TOKEN__"', json.dumps(os.environ["UPSTASH_TOKEN"])))
-          open("coder_kaggle.py", "w").write(src)
-          json.dump({"id": f'{os.environ["KAGGLE_USERNAME"]}/wengpt-coder-server',
-                     "title": "wengpt-coder-server", "code_file": "coder_kaggle.py",
-                     "language": "python", "kernel_type": "script", "is_private": True,
-                     "enable_gpu": True, "enable_internet": True,
-                     "machine_shape": "NvidiaTeslaT4",
-                     "dataset_sources": ["pumpydark/qwen3-coder-cache"],
-                     "competition_sources": [], "kernel_sources": [], "model_sources": []},
-                    open("kernel-metadata.json", "w"))
-          PY
-          kaggle kernels push -p .
+          kaggle kernels push -p ~/coder-push
